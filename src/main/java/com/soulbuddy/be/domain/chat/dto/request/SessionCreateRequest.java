@@ -1,10 +1,12 @@
-package com.soulbuddy.be.domain.chat.dto;
+package com.soulbuddy.domain.chat.dto.request;
 
-import com.soulbuddy.be.global.enums.PersonaType;
+import com.soulbuddy.global.enums.PersonaType;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Getter
+@NoArgsConstructor
 public class SessionCreateRequest {
 
     @NotNull

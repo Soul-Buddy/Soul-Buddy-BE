@@ -1,17 +1,19 @@
-package com.soulbuddy.be.domain.dashboard.service;
+package com.soulbuddy.domain.dashboard.service;
 
-import com.soulbuddy.be.domain.chat.entity.ChatSession;
-import com.soulbuddy.be.domain.dashboard.dto.DashboardResponse;
-import com.soulbuddy.be.domain.emotion.entity.EmotionLog;
-import com.soulbuddy.be.domain.emotion.repository.EmotionLogRepository;
-import com.soulbuddy.be.domain.summary.entity.Summary;
-import com.soulbuddy.be.domain.summary.repository.SummaryRepository;
+import com.soulbuddy.domain.chat.entity.ChatSession;
+import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
+import com.soulbuddy.domain.dashboard.dto.response.DashboardResponse;
+import com.soulbuddy.domain.emotion.repository.EmotionLogRepository;
+import com.soulbuddy.global.enums.EmotionTag;
+import com.soulbuddy.global.enums.SessionStatus;
+import com.soulbuddy.global.enums.SummaryStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -21,46 +23,47 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class DashboardService {
 
+    private final ChatSessionRepository chatSessionRepository;
     private final EmotionLogRepository emotionLogRepository;
-    private final SummaryRepository summaryRepository;
+    private final com.soulbuddy.domain.summary.service.SummaryService summaryService;
 
-    public DashboardResponse getDashboard(Long userId, Pageable pageable) {
-        // 감정 통계 집계
-        List<EmotionLog> logs = emotionLogRepository.findByUserId(userId);
-        Map<String, Long> emotionStats = logs.stream()
-                .collect(Collectors.groupingBy(
-                        log -> log.getEmotionTag().name(),
-                        Collectors.counting()
-                ));
+    // GET /api/dashboard/me
+    public DashboardResponse getDashboard(Long userId, int page, int size) {
 
-        // 최근 요약 카드 (페이징)
-        Page<Summary> summaryPage = summaryRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, pageable);
+        // 감정 통계
+        Map<EmotionTag, Long> emotionStats = Arrays.stream(EmotionTag.values())
+                .collect(Collectors.toMap(tag -> tag, tag -> 0L));
 
-        List<DashboardResponse.SummaryCard> summaryCards = summaryPage.getContent().stream()
-                .map(this::toSummaryCard)
+        emotionLogRepository.countEmotionTagByUserId(userId)
+                .forEach(row -> emotionStats.put((EmotionTag) row[0], (Long) row[1]));
+
+        // 요약 카드 목록
+        Page<ChatSession> sessionPage = chatSessionRepository
+                .findByUserIdAndStatusAndSummaryStatusAndDeletedAtIsNullOrderByEndedAtDesc(
+                        userId, SessionStatus.ENDED, SummaryStatus.CREATED, PageRequest.of(page, size));
+
+        List<DashboardResponse.SummaryCard> summaryCards = sessionPage.getContent().stream()
+                .map(s -> {
+                    var card = summaryService.findSummaryCardBySessionId(s.getId());
+                    return DashboardResponse.SummaryCard.builder()
+                            .sessionId(s.getId())
+                            .date(s.getEndedAt().toLocalDate())
+                            .personaType(s.getPersonaType())
+                            .characterName(s.getPersonaType().characterName())
+                            .quoteText(card.map(c -> c.getQuoteText()).orElse(null))
+                            .dominantEmotion(card.map(c -> c.getDominantEmotion()).orElse(null))
+                            .emotionChange(card.map(c -> c.getEmotionChange()).orElse(null))
+                            .build();
+                })
                 .toList();
 
         return DashboardResponse.builder()
                 .userId(userId)
                 .emotionStats(emotionStats)
                 .recentSummaries(summaryCards)
-                .totalSummaryCount(summaryPage.getTotalElements())
-                .page(pageable.getPageNumber())
-                .size(pageable.getPageSize())
-                .build();
-    }
-
-    private DashboardResponse.SummaryCard toSummaryCard(Summary summary) {
-        ChatSession session = summary.getSession();
-
-        return DashboardResponse.SummaryCard.builder()
-                .sessionId(session.getId())
-                .date(summary.getCreatedAt().toLocalDate().toString())
-                .summary(summary.getSummaryText())
-                .dominantEmotion(summary.getDominantEmotion() != null
-                        ? summary.getDominantEmotion().name() : null)
-                .personaType(session.getPersonaType().name())
+                .totalSummaryCount(sessionPage.getTotalElements())
+                .page(page)
+                .size(size)
                 .build();
     }
 }

@@ -1,21 +1,11 @@
-package com.soulbuddy.be.domain.chat.entity;
+package com.soulbuddy.domain.chat.entity;
 
-import com.soulbuddy.be.global.enums.PersonaType;
-import com.soulbuddy.be.global.enums.SessionStatus;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import com.soulbuddy.global.enums.EmotionTag;
+import com.soulbuddy.global.enums.PersonaType;
+import com.soulbuddy.global.enums.SessionStatus;
+import com.soulbuddy.global.enums.SummaryStatus;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -31,32 +21,40 @@ import java.util.UUID;
 public class ChatSession {
 
     @Id
-    @Column(length = 36)
+    @Column(name = "id", length = 36)
     @Builder.Default
     private String id = UUID.randomUUID().toString();
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "persona_type", nullable = false)
+    @Column(name = "persona_type", nullable = false, length = 20)
     private PersonaType personaType;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 20)
     private SessionStatus status = SessionStatus.ACTIVE;
 
-    @Column(length = 255)
-    private String title;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "pre_chat_emotion", length = 20)
+    private EmotionTag preChatEmotion;
 
     @Builder.Default
-    @Column(name = "started_at", nullable = false, updatable = false)
+    @Column(name = "started_at", nullable = false)
     private LocalDateTime startedAt = LocalDateTime.now();
 
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
+
+    @Builder.Default
+    @Enumerated(EnumType.STRING)
+    @Column(name = "summary_status", nullable = false, length = 20)
+    private SummaryStatus summaryStatus = SummaryStatus.NOT_CREATED;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -65,4 +63,22 @@ public class ChatSession {
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    public void updatePreChatEmotion(EmotionTag emotion) {
+        this.preChatEmotion = emotion;
+    }
+
+    public void end(SummaryStatus summaryStatus) {
+        this.status = SessionStatus.ENDED;
+        this.endedAt = LocalDateTime.now();
+        this.summaryStatus = summaryStatus;
+    }
+
+    public void softDelete() {
+        this.deletedAt = LocalDateTime.now();
+    }
+
+    public boolean isActive() {
+        return this.status == SessionStatus.ACTIVE;
+    }
 }

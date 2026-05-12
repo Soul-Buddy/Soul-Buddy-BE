@@ -1,183 +1,199 @@
-package com.soulbuddy.be.domain.chat.service;
+package com.soulbuddy.domain.chat.service;
 
-import com.soulbuddy.be.ai.dto.SummaryResult;
-import com.soulbuddy.be.ai.service.AiSummaryService;
-import com.soulbuddy.be.domain.chat.entity.ChatMessage;
-import com.soulbuddy.be.domain.chat.entity.ChatSession;
-import com.soulbuddy.be.domain.chat.repository.ChatMessageRepository;
-import com.soulbuddy.be.domain.chat.repository.ChatSessionRepository;
-import com.soulbuddy.be.domain.summary.entity.Summary;
-import com.soulbuddy.be.domain.summary.repository.SummaryRepository;
-import com.soulbuddy.be.domain.user.entity.User;
-import com.soulbuddy.be.domain.user.repository.UserRepository;
-import com.soulbuddy.be.global.enums.EmotionTag;
-import com.soulbuddy.be.global.enums.PersonaType;
-import com.soulbuddy.be.global.enums.Sender;
-import com.soulbuddy.be.global.enums.SessionStatus;
-import com.soulbuddy.be.global.exception.BusinessException;
-import com.soulbuddy.be.global.response.ErrorCode;
+import com.soulbuddy.ai.dto.ChatMessageDto;
+import com.soulbuddy.ai.dto.OpeningContext;
+import com.soulbuddy.ai.dto.SummaryResult;
+import com.soulbuddy.ai.service.AiChatService;
+import com.soulbuddy.ai.service.AiSummaryService;
+import com.soulbuddy.domain.chat.dto.response.SessionDeleteResponse;
+import com.soulbuddy.domain.chat.dto.response.SessionEndResponse;
+import com.soulbuddy.domain.chat.dto.response.SessionItemResponse;
+import com.soulbuddy.domain.chat.dto.response.SessionListResponse;
+import com.soulbuddy.domain.chat.entity.ChatMessage;
+import com.soulbuddy.domain.chat.entity.ChatSession;
+import com.soulbuddy.domain.chat.dto.response.PreChatEmotionResponse;
+import com.soulbuddy.domain.chat.dto.response.SessionCreateResponse;
+import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
+import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
+import com.soulbuddy.domain.emotion.service.EmotionLogService;
+import com.soulbuddy.global.enums.*;
+import com.soulbuddy.global.exception.BusinessException;
+import com.soulbuddy.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 public class SessionService {
 
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final SummaryRepository summaryRepository;
-    private final UserRepository userRepository;
+    private final AiChatService aiChatService;
     private final AiSummaryService aiSummaryService;
+    private final EmotionLogService emotionLogService;
+    private final com.soulbuddy.domain.summary.service.SummaryService summaryService;
 
-    private static final String OPENING_MESSAGE_FIRST = "안녕하세요. 저는 말벗 오누이입니다. 오늘은 어떤 일로 고민이신가요?";
-    private static final String OPENING_MESSAGE_RETURN = "오늘은 어떤 일이 있었나요?";
-    private static final int MAX_RECENT_SUMMARIES = 7;
-    private static final int RECENT_SUMMARY_MAX_LENGTH = 500;
+    // POST /api/sessions
+    public SessionCreateResponse createSession(Long userId, PersonaType personaType, String nickname) {
 
-    @Transactional
-    public ChatSession createSession(Long userId, PersonaType personaType) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_001));
+        Optional<ChatSession> prevSession = chatSessionRepository
+                .findTopByUserIdAndStatusOrderByEndedAtDesc(userId, SessionStatus.ENDED);
 
-        ChatSession session = ChatSession.builder()
-                .user(user)
-                .personaType(personaType)
-                .build();
-        chatSessionRepository.save(session);
+        OpeningContext.VisitState visitState = prevSession.isPresent()
+                ? OpeningContext.VisitState.RETURNING
+                : OpeningContext.VisitState.FIRST;
 
-        // 오프닝 메시지 저장
-        boolean hasPreviousSession = chatSessionRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, Pageable.ofSize(2))
-                .getTotalElements() > 1;
+        String recentSummary = prevSession
+                .flatMap(s -> summaryService.findMemoryHintBySessionId(s.getId()))
+                .orElse(null);
 
-        String openingMessage = hasPreviousSession ? OPENING_MESSAGE_RETURN : OPENING_MESSAGE_FIRST;
+        ChatSession session = chatSessionRepository.save(
+                ChatSession.builder()
+                        .userId(userId)
+                        .personaType(personaType)
+                        .build()
+        );
 
-        ChatMessage opening = ChatMessage.builder()
-                .session(session)
-                .sender(Sender.ASSISTANT)
-                .content(openingMessage)
-                .build();
-        chatMessageRepository.save(opening);
+        String openingMsg = aiChatService.openingMessage(
+                OpeningContext.builder()
+                        .personaType(personaType)
+                        .nickname(nickname)
+                        .visitState(visitState)
+                        .recentSummary(recentSummary)
+                        .build()
+        );
 
-        return session;
-    }
+        chatMessageRepository.save(
+                ChatMessage.builder()
+                        .sessionId(session.getId())
+                        .sender(Sender.ASSISTANT)
+                        .content(openingMsg)
+                        .aiModel(personaType.aiModelTag())
+                        .build()
+        );
 
-    public Page<ChatSession> getSessions(Long userId, Pageable pageable) {
-        return chatSessionRepository.findByUserIdOrderByCreatedAtDesc(userId, pageable);
-    }
-
-    public ChatSession getSession(String sessionId) {
-        return chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
-    }
-
-    @Transactional
-    public Summary endSession(Long userId, String sessionId) {
-        ChatSession session = chatSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
-
-        // 세션 종료 처리
-        ChatSession ended = ChatSession.builder()
-                .id(session.getId())
-                .user(session.getUser())
+        return SessionCreateResponse.builder()
+                .sessionId(session.getId())
                 .personaType(session.getPersonaType())
-                .status(SessionStatus.ENDED)
-                .title(session.getTitle())
-                .startedAt(session.getStartedAt())
-                .endedAt(LocalDateTime.now())
+                .openingMessage(openingMsg)
+                .recentSummary(recentSummary)
+                .createdAt(session.getCreatedAt())
                 .build();
-        chatSessionRepository.save(ended);
-
-        // 전체 대화 가져와서 요약 생성
-        List<ChatMessage> messages = chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
-        SummaryResult result = aiSummaryService.summarize(messages);
-
-        // 감정 변화 흐름 계산
-        String emotionChange = buildEmotionChange(messages);
-
-        // Summary 저장
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.USER_001));
-
-        Summary summary = Summary.builder()
-                .session(session)
-                .user(user)
-                .summaryText(result.getSummaryText())
-                .dominantEmotion(parseEmotionTag(result.getDominantEmotion()))
-                .emotionChange(emotionChange)
-                .memoryHint(result.getMemoryHint())
-                .build();
-
-        return summaryRepository.save(summary);
     }
+   // GET /api/sessions
+    public SessionListResponse getSessions(Long userId, String status, int page, int size) {
 
-    /**
-     * 최근 종료 세션들의 요약을 압축하여 recentSummary 문자열을 생성합니다.
-     * 최대 7개 세션, 500자 제한.
-     */
-    public String buildRecentSummary(Long userId) {
-        Page<Summary> recentPage = summaryRepository
-                .findByUserIdOrderByCreatedAtDesc(userId, Pageable.ofSize(MAX_RECENT_SUMMARIES));
+        PageRequest pageable = PageRequest.of(page, size);
+        Page<ChatSession> sessionPage;
 
-        List<Summary> summaries = recentPage.getContent();
-        if (summaries.isEmpty()) {
-            return null;
+        if (status != null) {
+            SessionStatus sessionStatus = SessionStatus.valueOf(status.toUpperCase());
+            sessionPage = chatSessionRepository
+                    .findByUserIdAndStatusAndDeletedAtIsNullOrderByStartedAtDesc(userId, sessionStatus, pageable);
+        } else {
+            sessionPage = chatSessionRepository
+                    .findByUserIdAndDeletedAtIsNullOrderByStartedAtDesc(userId, pageable);
         }
 
-        // 오래된 순으로 정렬 (역순)
-        List<Summary> oldest = summaries.reversed();
-
-        StringBuilder sb = new StringBuilder("[과거 대화 요약]\n");
-        int totalSessions = oldest.size();
-
-        for (int i = 0; i < totalSessions; i++) {
-            Summary s = oldest.get(i);
-            String label = getSessionLabel(totalSessions - i);
-
-            String line = String.format("(%s) 상황: %s / 핵심감정: %s / 감정변화: %s\n",
-                    label,
-                    s.getSummaryText(),
-                    s.getDominantEmotion() != null ? s.getDominantEmotion().name() : "NEUTRAL",
-                    s.getEmotionChange() != null ? s.getEmotionChange() : "없음");
-
-            if (sb.length() + line.length() > RECENT_SUMMARY_MAX_LENGTH) {
-                break;
-            }
-            sb.append(line);
-        }
-
-        return sb.toString().trim();
-    }
-
-    private String getSessionLabel(int sessionsAgo) {
-        if (sessionsAgo == 1) return "지난 대화";
-        return sessionsAgo + "회 전";
-    }
-
-    private String buildEmotionChange(List<ChatMessage> messages) {
-        List<String> emotions = messages.stream()
-                .filter(m -> m.getSender() == Sender.ASSISTANT && m.getEmotionTag() != null)
-                .map(m -> m.getEmotionTag().name())
+        List<SessionItemResponse> items = sessionPage.getContent().stream()
+                .map(s -> {
+                    var card = summaryService.findSummaryCardBySessionId(s.getId());
+                    return SessionItemResponse.builder()
+                            .sessionId(s.getId())
+                            .personaType(s.getPersonaType())
+                            .characterName(s.getPersonaType().characterName())
+                            .status(s.getStatus())
+                            .preChatEmotion(s.getPreChatEmotion())
+                            .summaryStatus(s.getSummaryStatus())
+                            .quoteText(card.map(c -> c.getQuoteText()).orElse(null))
+                            .dominantEmotion(card.map(c -> c.getDominantEmotion()).orElse(null))
+                            .emotionChange(card.map(c -> c.getEmotionChange()).orElse(null))
+                            .startedAt(s.getStartedAt())
+                            .endedAt(s.getEndedAt())
+                            .build();
+                })
                 .toList();
 
-        if (emotions.isEmpty()) return null;
-        if (emotions.size() == 1) return emotions.get(0);
-
-        return emotions.getFirst() + " → " + emotions.getLast();
+        return SessionListResponse.builder()
+                .sessions(items)
+                .totalCount(sessionPage.getTotalElements())
+                .page(page)
+                .size(size)
+                .build();
     }
 
-    private EmotionTag parseEmotionTag(String value) {
-        try {
-            return EmotionTag.valueOf(value);
-        } catch (Exception e) {
-            return EmotionTag.NEUTRAL;
+    // DELETE /api/sessions/{id}
+    public SessionDeleteResponse deleteSession(Long userId, String sessionId) {
+
+        ChatSession session = chatSessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
+
+        session.softDelete();
+
+        return SessionDeleteResponse.builder()
+                .sessionId(session.getId())
+                .deletedAt(session.getDeletedAt())
+                .build();
+    }
+    
+    // PATCH /api/sessions/{id}/end
+    public SessionEndResponse endSession(Long userId, String sessionId) {
+
+        ChatSession session = chatSessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
+
+        if (!session.isActive()) {
+            throw new BusinessException(ErrorCode.SESSION_002);
         }
+
+        List<ChatMessageDto> messageDtos = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(sessionId)
+                .stream()
+                .map(m -> ChatMessageDto.builder()
+                        .sender(m.getSender())
+                        .content(m.getContent())
+                        .createdAt(m.getCreatedAt())
+                        .build())
+                .toList();
+
+        SummaryResult result = aiSummaryService.summarize(messageDtos);
+
+        session.end(SummaryStatus.CREATED);
+
+        return SessionEndResponse.builder()
+                .sessionId(session.getId())
+                .status(session.getStatus())
+                .summaryStatus(session.getSummaryStatus())
+                .summaryText(result.getSummaryText())
+                .situationText(result.getSituationText())
+                .emotionText(result.getEmotionText())
+                .thoughtText(result.getThoughtText())
+                .dominantEmotion(result.getDominantEmotion())
+                .emotionChange(result.getEmotionChange())
+                .memoryHint(result.getMemoryHint())
+                .endedAt(session.getEndedAt())
+                .build();
+    }
+
+    // PATCH /api/sessions/{id}/pre-chat-emotion
+    public PreChatEmotionResponse updatePreChatEmotion(Long userId, String sessionId, EmotionTag emotion) {
+
+        ChatSession session = chatSessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
+
+        session.updatePreChatEmotion(emotion);
+
+        emotionLogService.log(userId, sessionId, null, emotion, EmotionSource.PRE_CHAT);
+
+        return PreChatEmotionResponse.builder()
+                .sessionId(session.getId())
+                .preChatEmotion(session.getPreChatEmotion())
+                .build();
     }
 }

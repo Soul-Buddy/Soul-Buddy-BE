@@ -1,154 +1,164 @@
-package com.soulbuddy.be.domain.chat.service;
+package com.soulbuddy.domain.chat.service;
 
-import com.soulbuddy.be.ai.dto.ChatRequest;
-import com.soulbuddy.be.ai.dto.ChatResponse;
-import com.soulbuddy.be.ai.dto.PromptContext;
-import com.soulbuddy.be.ai.filter.SafetyFilter;
-import com.soulbuddy.be.ai.service.AiChatService;
-import com.soulbuddy.be.domain.chat.entity.ChatMessage;
-import com.soulbuddy.be.domain.chat.entity.ChatSession;
-import com.soulbuddy.be.domain.chat.repository.ChatMessageRepository;
-import com.soulbuddy.be.domain.chat.repository.ChatSessionRepository;
-import com.soulbuddy.be.domain.emotion.service.EmotionLogService;
-import com.soulbuddy.be.domain.user.entity.Profile;
-import com.soulbuddy.be.domain.user.repository.ProfileRepository;
-import com.soulbuddy.be.global.enums.EmotionTag;
-import com.soulbuddy.be.global.enums.RiskLevel;
-import com.soulbuddy.be.global.enums.Sender;
-import com.soulbuddy.be.global.exception.BusinessException;
-import com.soulbuddy.be.global.response.ErrorCode;
+import com.soulbuddy.ai.dto.ChatRequest;
+import com.soulbuddy.ai.dto.ChatResponse;
+import com.soulbuddy.ai.dto.PromptContext;
+import com.soulbuddy.ai.service.AiChatService;
+import com.soulbuddy.domain.chat.dto.response.ChatHistoryResponse;
+import com.soulbuddy.domain.chat.entity.ChatMessage;
+import com.soulbuddy.domain.chat.entity.ChatSession;
+import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
+import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
+import com.soulbuddy.domain.emotion.service.EmotionLogService;
+import com.soulbuddy.domain.user.service.ProfileQueryService;
+import com.soulbuddy.global.enums.*;
+import com.soulbuddy.global.exception.BusinessException;
+import com.soulbuddy.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.List;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional
 public class ChatService {
 
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final ProfileRepository profileRepository;
     private final AiChatService aiChatService;
-    private final SafetyFilter safetyFilter;
     private final EmotionLogService emotionLogService;
+    private final ProfileQueryService profileQueryService;
+    private final com.soulbuddy.domain.safety.service.SafetyEventService safetyEventService;
 
-    private static final int MAX_HISTORY_SIZE = 10;
-    private static final int PERSONALITY_MAX_LENGTH = 100;
-    private static final int HOBBIES_MAX_COUNT = 3;
-    private static final int CONCERNS_MAX_COUNT = 3;
-    private static final int RECENT_SUMMARY_MAX_LENGTH = 200;
-
-    @Transactional
+    // POST /api/chat
     public ChatResponse processChat(Long userId, ChatRequest request) {
-        ChatSession session = chatSessionRepository.findById(request.getSessionId())
+
+        ChatSession session = chatSessionRepository.findByIdAndUserId(request.getSessionId(), userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
 
-        // 1. 기존 히스토리 조회 (현재 메시지 저장 전)
-        List<ChatMessage> allMessages = chatMessageRepository
-                .findBySessionIdOrderByCreatedAtAsc(request.getSessionId());
-        int fromIndex = Math.max(0, allMessages.size() - MAX_HISTORY_SIZE);
-        List<ChatMessage> recentHistory = allMessages.subList(fromIndex, allMessages.size());
-
-        // 2. 유저 메시지 DB 저장
-        ChatMessage userMsg = ChatMessage.builder()
-                .session(session)
-                .sender(Sender.USER)
-                .content(request.getMessage())
-                .build();
-        chatMessageRepository.save(userMsg);
-
-        // 3. SafetyFilter 1차 검사 (룰 기반)
-        RiskLevel preCheckResult = safetyFilter.preCheck(request.getMessage());
-        if (preCheckResult == RiskLevel.HIGH) {
-            ChatResponse safetyResponse = safetyFilter.buildSafetyResponse();
-            saveAssistantMessage(session, safetyResponse);
-            emotionLogService.save(userId, session, EmotionTag.ANXIOUS);
-            return safetyResponse;
+        if (!session.isActive()) {
+            throw new BusinessException(ErrorCode.SESSION_002);
         }
 
-        // 4. PromptContext 조립
-        PromptContext context = buildPromptContext(userId, request);
+        // ① USER 메시지 저장 (분류 결과는 AI 호출 후 반영)
+        ChatMessage userMessage = chatMessageRepository.save(
+                ChatMessage.builder()
+                        .sessionId(session.getId())
+                        .sender(Sender.USER)
+                        .content(request.getMessage())
+                        .build()
+        );
 
-        // 5. AI 파이프라인 호출 (히스토리 + 현재 메시지 포함)
-        recentHistory.add(userMsg);
-        ChatResponse response = aiChatService.process(context, recentHistory);
+        // ② PromptContext 조립
+        List<ChatMessage> recent = chatMessageRepository
+                .findTop20BySessionIdOrderByCreatedAtDesc(session.getId());
+        Collections.reverse(recent);
 
-        // 6. AI 응답 메시지 DB 저장
-        saveAssistantMessage(session, response);
+        boolean firstTurn = recent.stream().filter(m -> m.getSender() == Sender.USER).count() == 1;
 
-        // 7. EmotionLog 저장
-        EmotionTag emotionTag = parseEmotionTag(response.getEmotionTag());
-        emotionLogService.save(userId, session, emotionTag);
+        List<PromptContext.TurnMessage> recentTurns = recent.stream()
+                .map(m -> PromptContext.TurnMessage.builder()
+                        .role(m.getSender() == Sender.USER ? "user" : "assistant")
+                        .content(m.getContent())
+                        .build())
+                .toList();
+
+        PromptContext context = PromptContext.builder()
+                .personaType(request.getPersonaType())
+                .personalInstruction(profileQueryService.getPersonalInstructionByUserId(userId))
+                .nickname(profileQueryService.getNicknameByUserId(userId))
+                .recentSummary(request.getRecentSummary())
+                .recentTurns(recentTurns)
+                .firstTurn(firstTurn)
+                .build();
+
+        // ③ recentHighCount 산출
+        long recentHighCount = chatMessageRepository
+                .countBySessionIdAndRiskLevel(session.getId(), RiskLevel.HIGH);
+
+        // ④ AI 호출
+        ChatResponse response = aiChatService.process(request, context, recentHighCount);
+
+        // ⑤ ASSISTANT 메시지 저장
+        ChatMessage assistantMessage = chatMessageRepository.save(
+                ChatMessage.builder()
+                        .sessionId(session.getId())
+                        .sender(response.isForcedSafety() ? Sender.SYSTEM : Sender.ASSISTANT)
+                        .content(response.getAssistantMessage())
+                        .emotionTag(response.getEmotionTag())
+                        .riskLevel(response.getRiskLevel())
+                        .interventionType(response.getInterventionType())
+                        .ragUsed(response.isRagUsed())
+                        .aiModel(response.getAiModel())
+                        .build()
+        );
+
+        // ⑥ 감정 로그
+        if (response.getEmotionTag() != null) {
+            emotionLogService.log(userId, session.getId(),
+                    userMessage.getId(), response.getEmotionTag(), EmotionSource.MESSAGE);
+        }
+
+        // ⑦ 위험도 HIGH → safety 이벤트
+        if (response.getRiskLevel() == RiskLevel.HIGH) {
+            safetyEventService.recordRiskDetected(
+                    userId,
+                    session.getId(),
+                    userMessage.getId(),
+                    RiskLevel.HIGH,
+                    false
+            );
+        }
+
+        // ⑧ 강제 안전 응답 → safety 이벤트
+        if (response.isForcedSafety()) {
+            safetyEventService.recordForcedSafetyReply(
+                    userId,
+                    session.getId(),
+                    assistantMessage.getId(),
+                    response.getRiskLevel(),
+                    true
+            );
+        }
 
         return response;
     }
 
-    public Page<ChatMessage> getChatHistory(String sessionId, Pageable pageable) {
-        return chatMessageRepository.findBySessionIdOrderByCreatedAtAsc(sessionId, pageable);
-    }
+    // GET /api/chat/history/{sessionId}
+    @Transactional(readOnly = true)
+    public ChatHistoryResponse getChatHistory(Long userId, String sessionId, int page, int size) {
 
-    private PromptContext buildPromptContext(Long userId, ChatRequest request) {
-        Profile profile = profileRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.PROFILE_001));
+        chatSessionRepository.findByIdAndUserId(sessionId, userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_001));
 
-        // Truncate 규칙 적용
-        String personality = truncate(profile.getPersonality(), PERSONALITY_MAX_LENGTH);
-        List<String> hobbies = limitList(profile.getHobbies(), HOBBIES_MAX_COUNT);
-        List<String> concerns = limitList(profile.getConcerns(), CONCERNS_MAX_COUNT);
-        String recentSummary = truncate(request.getRecentSummary(), RECENT_SUMMARY_MAX_LENGTH);
+        Page<ChatMessage> messagePage = chatMessageRepository
+                .findBySessionIdOrderByCreatedAtAsc(sessionId, PageRequest.of(page, size));
 
-        return PromptContext.builder()
-                .nickname(profile.getNickname())
-                .preferredTone(profile.getPreferredTone())
-                .personality(personality)
-                .hobbies(hobbies)
-                .concerns(concerns)
-                .recentSummary(recentSummary)
-                .personaType(request.getPersonaType())
+        List<ChatHistoryResponse.MessageItem> items = messagePage.getContent().stream()
+                .map(m -> ChatHistoryResponse.MessageItem.builder()
+                        .messageId(m.getId())
+                        .sender(m.getSender())
+                        .content(m.getContent())
+                        .emotionTag(m.getEmotionTag())
+                        .riskLevel(m.getRiskLevel())
+                        .interventionType(m.getInterventionType())
+                        .ragUsed(m.isRagUsed())
+                        .aiModel(m.getAiModel())
+                        .createdAt(m.getCreatedAt())
+                        .build())
+                .toList();
+
+        return ChatHistoryResponse.builder()
+                .sessionId(sessionId)
+                .messages(items)
+                .totalCount(messagePage.getTotalElements())
+                .page(page)
+                .size(size)
                 .build();
-    }
-
-    private void saveAssistantMessage(ChatSession session, ChatResponse response) {
-        ChatMessage aiMsg = ChatMessage.builder()
-                .session(session)
-                .sender(Sender.ASSISTANT)
-                .content(response.getAssistantMessage())
-                .emotionTag(parseEmotionTag(response.getEmotionTag()))
-                .riskLevel(parseRiskLevel(response.getRiskLevel()))
-                .build();
-        chatMessageRepository.save(aiMsg);
-    }
-
-    private EmotionTag parseEmotionTag(String value) {
-        try {
-            return EmotionTag.valueOf(value);
-        } catch (Exception e) {
-            return EmotionTag.NEUTRAL;
-        }
-    }
-
-    private RiskLevel parseRiskLevel(String value) {
-        try {
-            return RiskLevel.valueOf(value);
-        } catch (Exception e) {
-            return RiskLevel.LOW;
-        }
-    }
-
-    private String truncate(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) return value;
-        return value.substring(0, maxLength) + "...";
-    }
-
-    private List<String> limitList(List<String> list, int maxCount) {
-        if (list == null || list.size() <= maxCount) return list;
-        return list.subList(0, maxCount);
     }
 }

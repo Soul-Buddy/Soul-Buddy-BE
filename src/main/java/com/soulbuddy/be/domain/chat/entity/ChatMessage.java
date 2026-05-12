@@ -1,24 +1,8 @@
-package com.soulbuddy.be.domain.chat.entity;
+package com.soulbuddy.domain.chat.entity;
 
-import com.soulbuddy.be.global.enums.EmotionTag;
-import com.soulbuddy.be.global.enums.RiskLevel;
-import com.soulbuddy.be.global.enums.Sender;
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import com.soulbuddy.global.enums.*;
+import jakarta.persistence.*;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
@@ -35,26 +19,37 @@ public class ChatMessage {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "session_id", nullable = false)
-    private ChatSession session;
+    @Column(name = "session_id", nullable = false, length = 36)
+    private String sessionId;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "sender", nullable = false)
+    @Column(name = "sender", nullable = false, length = 20)
     private Sender sender;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "emotion_tag")
+    @Column(name = "emotion_tag", length = 30)
     private EmotionTag emotionTag;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "risk_level")
+    @Column(name = "risk_level", length = 10)
     private RiskLevel riskLevel;
+
+    @Convert(converter = InterventionTypeConverter.class)
+    @Column(name = "intervention_type", length = 60)
+    private InterventionType interventionType;
+
+    @Builder.Default
+    @Column(name = "rag_used", nullable = false)
+    private boolean ragUsed = false;
+
+    @Column(name = "ai_model", length = 50)
+    private String aiModel;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
 }
