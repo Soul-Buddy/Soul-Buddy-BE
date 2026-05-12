@@ -22,97 +22,50 @@ public class SafetyEventService {
 
     private final SafetyeventRepository safetyEventRepository;
 
-    /**
-     * Safety 이벤트 기록 (내부 공통 메서드)
-     */
     @Transactional
     public SafetyeventDto.Response record(SafetyeventDto.CreateRequest request) {
         Safetyevent event = request.toEntity();
         Safetyevent saved = safetyEventRepository.save(event);
-
-        log.info("[SafetyEvent] type={}, userId={}, sessionId={}, riskLevel={}, forcedSafety={}",
-                saved.getEventType(), saved.getUserId(), saved.getSessionId(),
-                saved.getRiskLevel(), saved.getForcedSafety());
-
+        log.info("[SafetyEvent Saved] ID: {}, Type: {}, User: {}", saved.getId(), saved.getEventType(), saved.getUserId());
         return SafetyeventDto.Response.from(saved);
     }
 
-    /**
-     * HIGH 위험 감지 시 safety_events INSERT
-     */
     @Transactional
-    public void recordRiskDetected(Long userId, String sessionId,
-                                   Long messageId, RiskLevel riskLevel, boolean isForced) {
-        SafetyeventDto.CreateRequest request = SafetyeventDto.CreateRequest.builder()
-                .userId(userId)
-                .sessionId(sessionId)
-                .messageId(messageId)
-                .eventType(EventType.RISK_DETECTED)
-                .riskLevel(riskLevel)
-                .forcedSafety(isForced)
-                .build();
-        record(request);
+    public void recordRiskDetected(Long userId, String sessionId, Long messageId, RiskLevel riskLevel, boolean isForced) {
+        this.record(SafetyeventDto.CreateRequest.builder()
+                .userId(userId).sessionId(sessionId).messageId(messageId)
+                .eventType(EventType.RISK_DETECTED).riskLevel(riskLevel).isForced(isForced)
+                .eventDescription("위험 문구 감지됨").build());
     }
 
-    /**
-     * 강제 안전 응답 시 safety_events INSERT
-     */
     @Transactional
-    public void recordForcedSafetyReply(Long userId, String sessionId,
-                                        Long messageId, RiskLevel riskLevel, boolean isForced) {
-        SafetyeventDto.CreateRequest request = SafetyeventDto.CreateRequest.builder()
-                .userId(userId)
-                .sessionId(sessionId)
-                .messageId(messageId)
-                .eventType(EventType.FORCED_SAFETY_REPLY)
-                .riskLevel(riskLevel)
-                .forcedSafety(isForced)
-                .build();
-        record(request);
+    public void recordForcedSafetyReply(Long userId, String sessionId, Long messageId, RiskLevel riskLevel, boolean isForced) {
+        this.record(SafetyeventDto.CreateRequest.builder()
+                .userId(userId).sessionId(sessionId).messageId(messageId)
+                .eventType(EventType.FORCED_SAFETY_REPLY).riskLevel(riskLevel).isForced(isForced)
+                .eventDescription("시스템에 의한 강제 안전 응답 전송").build());
     }
 
-    /**
-     * 단건 조회
-     */
     public SafetyeventDto.Response getById(Long id) {
-        Safetyevent event = safetyEventRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("SafetyEvent not found: " + id));
-        return SafetyeventDto.Response.from(event);
+        return safetyEventRepository.findById(id).map(SafetyeventDto.Response::from)
+                .orElseThrow(() -> new IllegalArgumentException("이벤트를 찾을 수 없습니다: " + id));
     }
 
-    /**
-     * 유저별 이벤트 전체 조회
-     */
     public List<SafetyeventDto.Response> getByUserId(Long userId) {
-        return safetyEventRepository.findByUserId(userId)
-                .stream()
-                .map(SafetyeventDto.Response::from)
-                .collect(Collectors.toList());
+        return safetyEventRepository.findByUserId(userId).stream()
+                .map(SafetyeventDto.Response::from).collect(Collectors.toList());
     }
 
-    /**
-     * 세션별 이벤트 조회
-     */
     public List<SafetyeventDto.Response> getBySessionId(String sessionId) {
-        return safetyEventRepository.findBySessionId(sessionId)
-                .stream()
-                .map(SafetyeventDto.Response::from)
-                .collect(Collectors.toList());
+        return safetyEventRepository.findBySessionId(sessionId).stream()
+                .map(SafetyeventDto.Response::from).collect(Collectors.toList());
     }
 
-    /**
-     * 기간별 HIGH 위험 이벤트 조회
-     */
     public List<SafetyeventDto.Response> getHighRiskBetween(LocalDateTime from, LocalDateTime to) {
-        return safetyEventRepository.findHighRiskBetween(from, to)
-                .stream()
-                .map(SafetyeventDto.Response::from)
-                .collect(Collectors.toList());
+        return safetyEventRepository.findHighRiskBetween(from, to).stream()
+                .map(SafetyeventDto.Response::from).collect(Collectors.toList());
     }
 
-    /**
-     * 해당 세션에서 이미 배너가 노출됐는지 확인
-     */
     public boolean isBannerAlreadyShown(String sessionId) {
         return safetyEventRepository.existsBySessionIdAndEventType(sessionId, EventType.BANNER_SHOWN);
     }

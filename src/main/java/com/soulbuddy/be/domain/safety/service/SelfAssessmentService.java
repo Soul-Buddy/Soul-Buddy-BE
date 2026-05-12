@@ -1,4 +1,3 @@
-// com/soulbuddy/be/domain/safety/service/SelfAssessmentService.java
 package com.soulbuddy.be.domain.safety.service;
 
 import com.soulbuddy.be.domain.safety.dto.SelfAssessmentDto;
@@ -8,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,19 +22,27 @@ public class SelfAssessmentService {
     @Transactional
     public SelfAssessmentDto.Response submitAssessment(SelfAssessmentDto.Request request) {
 
+        // 1. DTO의 점수 데이터들을 엔티티의 Map<String, String> answers에 담기
+        Map<String, String> answerMap = new HashMap<>();
+        answerMap.put("totalScore", String.valueOf(request.getTotalScore()));
+        answerMap.put("suicidalThoughtScore", String.valueOf(request.getSuicidalThoughtScore()));
+        answerMap.put("selfHarmIntentScore", String.valueOf(request.getSelfHarmIntentScore()));
+        answerMap.put("hopelessnessScore", String.valueOf(request.getHopelessnessScore()));
+        answerMap.put("riskLevel", request.getRiskLevel());
+        answerMap.put("notes", request.getNotes());
+        answerMap.put("rawResponse", request.getResponseData());
+
+        // 2. 엔티티 생성 및 저장
         SelfAssessment entity = SelfAssessment.builder()
                 .userId(request.getUserId())
                 .sessionId(request.getSessionId())
-                .assessmentType(request.getAssessmentType())
-                .answers(request.getAnswers())
+                .assessmentType("SUICIDE_RISK") // 기본값
+                .answers(answerMap)
                 .build();
 
         SelfAssessment saved = selfAssessmentRepository.save(entity);
 
-        int score = calculateScore(request.getAnswers());
-        String riskGrade = determineRiskGrade(score);
-
-        return toResponse(saved, score, riskGrade);
+        return toResponse(saved);
     }
 
     /** 유저별 설문 이력 조회 */
@@ -43,10 +51,7 @@ public class SelfAssessmentService {
         return selfAssessmentRepository
                 .findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
-                .map(e -> {
-                    int score = calculateScore(e.getAnswers());
-                    return toResponse(e, score, determineRiskGrade(score));
-                })
+                .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
@@ -56,46 +61,39 @@ public class SelfAssessmentService {
         return selfAssessmentRepository
                 .findBySessionId(sessionId)
                 .stream()
-                .map(e -> {
-                    int score = calculateScore(e.getAnswers());
-                    return toResponse(e, score, determineRiskGrade(score));
-                })
+                .map(this::toResponse)
                 .collect(Collectors.toList());
     }
 
     // ──────────────────────────────────
-    // Private 헬퍼
+    // Private 헬퍼: Map에서 데이터를 꺼내 DTO로 변환
     // ──────────────────────────────────
 
-    private int calculateScore(Map<String, String> answers) {
-        int total = 0;
-        for (String answer : answers.values()) {
-            switch (answer) {
-                case "NEVER"     -> total += 0;
-                case "SOMETIMES" -> total += 1;
-                case "OFTEN"     -> total += 2;
-                default          -> total += 0;
-            }
-        }
-        return total;
-    }
+    private SelfAssessmentDto.Response toResponse(SelfAssessment entity) {
+        Map<String, String> answers = entity.getAnswers();
 
-    private String determineRiskGrade(int score) {
-        if (score >= 4) return "HIGH";
-        if (score >= 2) return "MEDIUM";
-        return "LOW";
-    }
-
-    private SelfAssessmentDto.Response toResponse(SelfAssessment entity, int score, String riskGrade) {
         return SelfAssessmentDto.Response.builder()
                 .id(entity.getId())
                 .userId(entity.getUserId())
                 .sessionId(entity.getSessionId())
-                .assessmentType(entity.getAssessmentType())
-                .answers(entity.getAnswers())
+                // Map에 저장된 String 값을 다시 Integer 등으로 변환하여 DTO에 매핑
+                .totalScore(parseSafeInt(answers.get("totalScore")))
+                .suicidalThoughtScore(parseSafeInt(answers.get("suicidalThoughtScore")))
+                .selfHarmIntentScore(parseSafeInt(answers.get("selfHarmIntentScore")))
+                .hopelessnessScore(parseSafeInt(answers.get("hopelessnessScore")))
+                .riskLevel(answers.get("riskLevel"))
+                .notes(answers.get("notes"))
+                .responseData(answers.get("rawResponse"))
+                .isCompleted(true)
                 .createdAt(entity.getCreatedAt())
-                .score(score)
-                .riskGrade(riskGrade)
                 .build();
+    }
+
+    private Integer parseSafeInt(String value) {
+        try {
+            return (value != null) ? Integer.parseInt(value) : 0;
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 }
