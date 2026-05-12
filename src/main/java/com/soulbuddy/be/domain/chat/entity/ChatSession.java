@@ -1,5 +1,6 @@
 package com.soulbuddy.be.domain.chat.entity;
 
+import com.soulbuddy.be.domain.user.entity.User;
 import com.soulbuddy.be.global.enums.PersonaType;
 import com.soulbuddy.be.global.enums.SessionStatus;
 import jakarta.persistence.Column;
