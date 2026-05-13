@@ -1,32 +1,53 @@
 package com.soulbuddy.domain.safety.controller;
 
+import com.soulbuddy.domain.safety.dto.SafetyEventDto;
+import com.soulbuddy.domain.safety.entity.SafetyEvent;
 import com.soulbuddy.domain.safety.service.SafetyEventService;
-import com.soulbuddy.global.enums.RiskLevel; // ✅ 글로벌 Enum 임포트
+import com.soulbuddy.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Safety Event", description = "안전 이벤트 관리")
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Tag(name = "Safety", description = "위험 감지 및 안전 조치 API")
 @RestController
-@RequestMapping("/api/v1/safety-events")
+@RequestMapping("/api/safety/events")
 @RequiredArgsConstructor
 public class SafetyEventController {
 
     private final SafetyEventService safetyEventService;
 
-    @Operation(summary = "위험 감지 기록", description = "위험 문구가 감지되었을 때 이벤트를 기록합니다.")
-    @PostMapping("/risk-detected")
-    public ResponseEntity<Void> recordRiskDetected(
-            @RequestParam Long userId,
-            @RequestParam String sessionId,
-            @RequestParam(required = false) Long messageId,
-            @RequestParam RiskLevel riskLevel, // ✅ 글로벌 타입으로 수신
-            @RequestParam(defaultValue = "false") boolean isForced) {
+    @Operation(
+            summary = "Safety 인터랙션 추적",
+            description = "배너 노출, 센터 전화 클릭 등 FE 이벤트를 기록하고 eventId와 생성시간을 반환합니다."
+    )
+    @PostMapping
+    public ResponseEntity<ApiResponse<SafetyEventDto.Response>> recordEvent(
+            @Valid @RequestBody SafetyEventDto.CreateRequest request) {
 
-        safetyEventService.recordRiskDetected(userId, sessionId, messageId, riskLevel, isForced);
-        return ResponseEntity.status(HttpStatus.CREATED).build();
+        SafetyEventDto.Response data = safetyEventService.recordCustomEvent(request);
+        return ResponseEntity.ok(ApiResponse.success(data));
+    }
+
+    @Operation(
+            summary = "세션별 이벤트 목록 조회",
+            description = "특정 세션에서 발생한 모든 안전 이벤트를 조회합니다."
+    )
+    @GetMapping("/session/{sessionId}")
+    public ResponseEntity<ApiResponse<List<SafetyEventDto.Response>>> getEventsBySession(
+            @PathVariable String sessionId) {
+
+        // 엔티티 리스트를 DTO 리스트로 변환하여 반환
+        List<SafetyEventDto.Response> data = safetyEventService.getEventsBySession(sessionId)
+                .stream()
+                .map(SafetyEventDto.Response::from)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 }

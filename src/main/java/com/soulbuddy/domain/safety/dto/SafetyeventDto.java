@@ -1,66 +1,53 @@
 package com.soulbuddy.domain.safety.dto;
 
-import com.soulbuddy.domain.safety.entity.Safetyevent;
-import com.soulbuddy.domain.safety.entity.Safetyevent.EventType;
-import com.soulbuddy.global.enums.RiskLevel; // ✅ 글로벌 Enum 사용
+import com.soulbuddy.domain.safety.entity.SafetyEvent;
+import com.soulbuddy.global.enums.RiskLevel;
+import com.soulbuddy.global.enums.SafetyEventType;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+
 import java.time.LocalDateTime;
 
-@Schema(description = "Safety 이벤트 관련 DTO")
-public class SafetyeventDto {
+@Schema(description = "안전 이벤트 데이터 규격")
+public class SafetyEventDto {
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    @Schema(description = "안전 이벤트 생성 요청 (Request Body)")
     public static class CreateRequest {
-        @NotNull @Schema(description = "사용자 ID", example = "123")
-        private Long userId;
-
-        @NotBlank @Schema(description = "세션 ID", example = "SESSION-001")
+        @NotBlank @Schema(description = "세션 ID", example = "uuid-string")
         private String sessionId;
 
+        @Schema(description = "메시지 ID", example = "123")
         private Long messageId;
 
-        @NotNull @Schema(description = "이벤트 타입")
-        private EventType eventType;
+        @NotNull @Schema(description = "이벤트 타입", example = "BANNER_SHOWN")
+        private SafetyEventType eventType;
 
-        @NotNull @Schema(description = "위험 수준")
-        private RiskLevel riskLevel; // ✅ 글로벌 RiskLevel
+        @Schema(description = "위험 수위", example = "MEDIUM")
+        private RiskLevel riskLevel;
 
-        private Boolean isForced;
-        private String eventDescription;
+        @Schema(description = "리소스 ID (센터 ID 등)", example = "null")
+        private Long resourceId;
 
-        public Safetyevent toEntity() {
-            return Safetyevent.builder()
-                    .userId(this.userId)
-                    .sessionId(this.sessionId)
-                    .messageId(this.messageId)
-                    .eventType(this.eventType)
-                    .riskLevel(this.riskLevel)
-                    .forcedSafety(this.isForced != null && this.isForced)
-                    .build();
-        }
+        // 유저 정보는 세션이나 인증 정보에서 가져올 수 있으나,
+        // 기존 코드 호환을 위해 필드가 필요하면 추가하세요.
+        private Long userId;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    @Schema(description = "안전 이벤트 응답 (Response Data)")
     public static class Response {
-        private Long id;
-        private EventType eventType;
-        private Long userId;
-        private String sessionId;
-        private RiskLevel riskLevel; // ✅ 글로벌 RiskLevel
-        private Boolean isForced;
+        @Schema(description = "생성된 이벤트 ID", example = "1")
+        private Long eventId;
+
+        @Schema(description = "생성 일시", example = "2026-05-13T10:10:00Z")
         private LocalDateTime createdAt;
 
-        public static Response from(Safetyevent entity) {
+        public static Response from(SafetyEvent entity) {
             return Response.builder()
-                    .id(entity.getId())
-                    .eventType(entity.getEventType())
-                    .userId(entity.getUserId())
-                    .sessionId(entity.getSessionId())
-                    .riskLevel(entity.getRiskLevel())
-                    .isForced(entity.getForcedSafety())
+                    .eventId(entity.getId())
                     .createdAt(entity.getCreatedAt())
                     .build();
         }

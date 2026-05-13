@@ -1,36 +1,21 @@
 package com.soulbuddy.domain.auth.dto;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-import lombok.Builder;
-import lombok.Getter;
-
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
 
-@Getter
-@Builder
-public class AgreementResponse {
+@Schema(description = "약관 동의 응답")
+public record AgreementResponse(
+        @Schema(description = "서비스 이용약관 동의 일시", example = "2026-05-04T10:00:00Z")
+        LocalDateTime termsAgreedAt,
 
-    private Long userId;
-    private String email;
-    private String nickname;
-
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime termsAgreedAt;
-
-    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
-    private LocalDateTime privacyAgreedAt;
-
-    private boolean agreedAll;
-
-    public static AgreementResponse of(Long userId, String email, String nickname,
-                                       LocalDateTime termsAgreedAt, LocalDateTime privacyAgreedAt) {
-        return AgreementResponse.builder()
-                .userId(userId)
-                .email(email)
-                .nickname(nickname)
-                .termsAgreedAt(termsAgreedAt)
-                .privacyAgreedAt(privacyAgreedAt)
-                .agreedAll(termsAgreedAt != null && privacyAgreedAt != null)
-                .build();
+        @Schema(description = "개인정보 수집 및 이용 동의 일시", example = "2026-05-04T10:00:00Z")
+        LocalDateTime privacyAgreedAt
+) {
+    /**
+     * 필요 시 정적 팩토리 메서드를 유지하고 싶다면 아래와 같이 작성할 수 있습니다.
+     * 계약서 스펙상 userId, email 등은 제외되었습니다.
+     */
+    public static AgreementResponse of(LocalDateTime termsAgreedAt, LocalDateTime privacyAgreedAt) {
+        return new AgreementResponse(termsAgreedAt, privacyAgreedAt);
     }
 }
