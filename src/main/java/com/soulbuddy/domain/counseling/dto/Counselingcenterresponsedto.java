@@ -1,6 +1,6 @@
 package com.soulbuddy.domain.counseling.dto;
 
-import com.soulbuddy.domain.counseling.entity.Counselingcenter;
+import com.soulbuddy.domain.counseling.entity.CounselingCenter;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -45,7 +45,7 @@ public class Counselingcenterresponsedto {
     @Schema(description = "수정 일시", example = "2024-01-15T14:30:00")
     private LocalDateTime updatedAt;
 
-    public static Counselingcenterresponsedto fromEntity(Counselingcenter entity) {
+    public static Counselingcenterresponsedto fromEntity(CounselingCenter entity) {
         return Counselingcenterresponsedto.builder()
                 .id(entity.getId())
                 .name(entity.getName())

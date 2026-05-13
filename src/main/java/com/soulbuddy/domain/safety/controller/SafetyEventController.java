@@ -5,10 +5,12 @@ import com.soulbuddy.domain.safety.entity.SafetyEvent;
 import com.soulbuddy.domain.safety.service.SafetyEventService;
 import com.soulbuddy.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -28,8 +30,10 @@ public class SafetyEventController {
     )
     @PostMapping
     public ResponseEntity<ApiResponse<SafetyEventDto.Response>> recordEvent(
+            @Parameter(hidden = true) @AuthenticationPrincipal String principal,
             @Valid @RequestBody SafetyEventDto.CreateRequest request) {
 
+        request.setUserId(Long.parseLong(principal));
         SafetyEventDto.Response data = safetyEventService.recordCustomEvent(request);
         return ResponseEntity.ok(ApiResponse.success(data));
     }
