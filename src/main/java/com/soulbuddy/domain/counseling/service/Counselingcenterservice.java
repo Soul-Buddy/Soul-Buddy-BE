@@ -1,6 +1,7 @@
 package com.soulbuddy.domain.counseling.service;
 
 import com.soulbuddy.domain.counseling.dto.Counselingcenterlistdto;
+import com.soulbuddy.domain.counseling.entity.CounselingCenter;
 import com.soulbuddy.domain.counseling.repository.Counselingcenterrepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,8 +18,21 @@ public class Counselingcenterservice {
 
     @Transactional(readOnly = true)
     public List<Counselingcenterlistdto> getCenters(String region, Boolean emergencyOnly) {
-        // Repository 쿼리 결과를 DTO로 변환
-        return repository.findCentersWithFilter(region, emergencyOnly).stream()
+        boolean hasRegion = region != null && !region.isBlank();
+        boolean isEmergencyOnly = Boolean.TRUE.equals(emergencyOnly);
+
+        List<CounselingCenter> centers;
+        if (hasRegion && isEmergencyOnly) {
+            centers = repository.findByRegionAndIsEmergencyTrueOrderByNameAsc(region);
+        } else if (hasRegion) {
+            centers = repository.findByRegionOrderByIsEmergencyDescNameAsc(region);
+        } else if (isEmergencyOnly) {
+            centers = repository.findByIsEmergencyTrueOrderByNameAsc();
+        } else {
+            centers = repository.findAllByOrderByIsEmergencyDescNameAsc();
+        }
+
+        return centers.stream()
                 .map(Counselingcenterlistdto::fromEntity)
                 .collect(Collectors.toList());
     }

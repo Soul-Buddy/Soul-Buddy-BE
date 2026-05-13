@@ -3,7 +3,16 @@ spring:
     active: local
   application:
     name: soul-buddy
-  # OAuth2 client registration은 준영 영역(domain/auth)에서 관리 — 지훈 dev 환경에서는 제거.
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - email
+              - profile
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -17,6 +26,12 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
+
+logging:
+  level:
+    root: INFO
+    org.hibernate: ERROR
+    com.soulbuddy: DEBUG
 
 server:
   port: ${SERVER_PORT:8080}
@@ -48,8 +63,6 @@ soulbuddy:
     forced-safety-threshold: 2
   rag:
     enabled: ${RAG_ENABLED:false}
-    vector-store-type: ${VECTOR_STORE_TYPE:NONE}
-    vector-store-url: ${VECTOR_STORE_URL:}
 
 jwt:
   secret: ${JWT_SECRET:soul-buddy-default-jwt-secret-please-change-me-32bytes-minimum}

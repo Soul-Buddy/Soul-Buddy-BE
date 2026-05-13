@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "02. Agreement", description = "약관·동의 관련 API")
+@Tag(name = "Agreement", description = "약관·동의 관련 API")
 @RestController
 @RequestMapping("/api/agreements")
 @RequiredArgsConstructor
@@ -23,7 +23,7 @@ public class AgreementController {
     private final AgreementService agreementService;
 
     @Operation(
-            summary = "약관 동의 제출 ([02 약관동의])",
+            summary = "약관 동의 제출",
             description = "사용자의 이용약관 및 개인정보 동의 상태를 업데이트합니다."
     )
     @ApiResponses(value = {

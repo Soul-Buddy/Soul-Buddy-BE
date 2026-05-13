@@ -18,7 +18,10 @@ import java.util.List;
 @RequestMapping("/api/personas")
 public class PersonaController {
 
-    @Operation(summary = "페르소나 목록 조회 (포코/루미)")
+    @Operation(
+            summary = "페르소나 목록 조회",
+            description = "선택 가능한 AI 페르소나 목록(포코 - 친구형, 루미 - 상담사형)을 반환합니다. 세션 생성 시 personaType 값으로 사용하세요."
+    )
     @GetMapping
     public ResponseEntity<ApiResponse<List<PersonaResponse>>> getPersonas() {
         List<PersonaResponse> personas = Arrays.stream(PersonaType.values())

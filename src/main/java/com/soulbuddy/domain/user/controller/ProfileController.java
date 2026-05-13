@@ -15,7 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "03. Profile", description = "온보딩 및 프로필 관리 API")
+@Tag(name = "Profile", description = "온보딩 및 프로필 관리 API")
 @RestController
 @RequiredArgsConstructor
 public class ProfileController {
@@ -23,7 +23,7 @@ public class ProfileController {
     private final ProfileService profileService;
 
     @Operation(
-            summary = "온보딩 제출 ([03 온보딩])",
+            summary = "온보딩 제출",
             description = "최초 1회 사용자의 정보를 입력받아 프로필을 생성하고 개인화 지침을 구축합니다."
     )
     @ApiResponses({
