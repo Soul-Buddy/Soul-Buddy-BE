@@ -18,6 +18,13 @@ spring:
         dialect: org.hibernate.dialect.MySQLDialect
         format_sql: true
 
+logging:
+  level:
+    root: INFO
+    org.hibernate: ERROR
+    org.springframework.web: ERROR
+    com.soulbuddy: DEBUG
+
 server:
   port: ${SERVER_PORT:8080}
 

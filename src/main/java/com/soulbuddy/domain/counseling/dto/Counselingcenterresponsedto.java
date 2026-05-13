@@ -42,9 +42,6 @@ public class Counselingcenterresponsedto {
     @Schema(description = "생성 일시", example = "2024-01-01T10:00:00")
     private LocalDateTime createdAt;
 
-    @Schema(description = "수정 일시", example = "2024-01-15T14:30:00")
-    private LocalDateTime updatedAt;
-
     public static Counselingcenterresponsedto fromEntity(CounselingCenter entity) {
         return Counselingcenterresponsedto.builder()
                 .id(entity.getId())
@@ -55,7 +52,6 @@ public class Counselingcenterresponsedto {
                 .isActive(entity.getIsActive())
                 .sortOrder(entity.getSortOrder())
                 .createdAt(entity.getCreatedAt())
-                .updatedAt(entity.getUpdatedAt())
                 .build();
     }
 }
