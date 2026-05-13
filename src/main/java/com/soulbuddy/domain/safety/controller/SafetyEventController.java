@@ -44,7 +44,7 @@ public class SafetyEventController {
     )
     @GetMapping("/session/{sessionId}")
     public ResponseEntity<ApiResponse<List<SafetyEventDto.Response>>> getEventsBySession(
-            @PathVariable String sessionId) {
+            @Parameter(description = "세션 ID (UUID)") @PathVariable String sessionId) {
 
         // 엔티티 리스트를 DTO 리스트로 변환하여 반환
         List<SafetyEventDto.Response> data = safetyEventService.getEventsBySession(sessionId)
