@@ -84,24 +84,13 @@ public class Profile {
         this.preferredTone = preferredTone;
         this.likedThings = likedThings;
         this.dislikedThings = dislikedThings;
-        rebuildPersonalInstruction();
+    }
+
+    public void updateInstruction(String personalInstruction) {
+        this.personalInstruction = personalInstruction;
     }
 
     public void completeOnboarding() {
         this.onboardingCompletedAt = LocalDateTime.now();
-        rebuildPersonalInstruction();
-    }
-
-    private void rebuildPersonalInstruction() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("닉네임: ").append(nickname).append("\n");
-        if (age != null) sb.append("나이: ").append(age).append("세\n");
-        if (gender != null) sb.append("성별: ").append(gender.name()).append("\n");
-        if (occupation != null && !occupation.isBlank()) sb.append("직업: ").append(occupation).append("\n");
-        if (usageIntent != null && !usageIntent.isBlank()) sb.append("사용 목적: ").append(usageIntent).append("\n");
-        if (hobbies != null && !hobbies.isEmpty()) sb.append("취미: ").append(String.join(", ", hobbies)).append("\n");
-        if (likedThings != null && !likedThings.isEmpty()) sb.append("좋아하는 것: ").append(String.join(", ", likedThings)).append("\n");
-        if (dislikedThings != null && !dislikedThings.isEmpty()) sb.append("싫어하는 것: ").append(String.join(", ", dislikedThings)).append("\n");
-        this.personalInstruction = sb.toString().trim();
     }
 }
