@@ -1,18 +1,19 @@
 package com.soulbuddy.domain.safety.entity;
 
-import com.soulbuddy.global.enums.RiskLevel; // ✅ 글로벌 Enum 사용
+import com.soulbuddy.global.enums.RiskLevel;
+import com.soulbuddy.global.enums.SafetyEventType;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "safety_events")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-@AllArgsConstructor
+@AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
-public class Safetyevent {
+@Entity
+@Table(name = "safety_events")
+public class SafetyEvent {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -21,34 +22,25 @@ public class Safetyevent {
     @Column(name = "user_id", nullable = false)
     private Long userId;
 
-    @Column(name = "session_id", nullable = false, length = 36)
+    @Column(name = "session_id", nullable = false)
     private String sessionId;
 
-    @Column(name = "message_id")
     private Long messageId;
-
-    @Column(name = "resource_id")
-    private Long resourceId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "event_type", nullable = false)
-    private EventType eventType;
+    private SafetyEventType eventType;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "risk_level")
-    private RiskLevel riskLevel; // ✅ 글로벌 RiskLevel
+    private RiskLevel riskLevel;
 
-    @Column(name = "forced_safety", nullable = false)
-    @Builder.Default
-    private Boolean forcedSafety = false;
+    private Long resourceId; // 추가됨: 센터 ID 등 기록용
+
+    @Column(name = "forced_safety")
+    private Boolean forcedSafety;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
-
-    public enum EventType {
-        RISK_DETECTED, BANNER_SHOWN, ASSESSMENT_OPENED, ASSESSMENT_COMPLETED,
-        CENTER_LIST_VIEWED, CENTER_CALL_TAPPED, FORCED_SAFETY_REPLY
-    }
-
 }

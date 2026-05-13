@@ -1,39 +1,35 @@
 package com.soulbuddy.domain.counseling.dto;
 
+import com.soulbuddy.domain.counseling.entity.CounselingCenter;
 import io.swagger.v3.oas.annotations.media.Schema;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-import java.time.LocalDateTime;
+import lombok.*;
 
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
-@Schema(description = "상담센터 목록 조회 응답 DTO")
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Schema(description = "상담센터 정보 응답")
 public class Counselingcenterlistdto {
 
-    @Schema(description = "센터 ID", example = "101")
+    @Schema(description = "센터 ID", example = "1")
     private Long id;
 
-    @Schema(description = "센터명", example = "청소년 상담센터")
+    @Schema(description = "센터 이름", example = "마음돌봄 상담센터")
     private String name;
 
-    @Schema(description = "전화번호", example = "02-1234-5678")
+    @Schema(description = "전화번호 (FE에서 tel: 링크로 사용)", example = "033-123-4567")
     private String phone;
 
-    @Schema(description = "지역", example = "서울")
+    @Schema(description = "지역", example = "원주")
     private String region;
 
-    @Schema(description = "긴급 센터 여부", example = "true")
+    @Schema(description = "긴급 여부 (상단 빨간 버튼용 데이터)", example = "true")
     private Boolean isEmergency;
 
-    @Schema(description = "정렬 순서", example = "1")
-    private Integer sortOrder;
-
-    @Schema(description = "생성 일시", example = "2024-01-01T10:00:00")
-    private LocalDateTime createdAt;
+    public static Counselingcenterlistdto fromEntity(CounselingCenter entity) {
+        return Counselingcenterlistdto.builder()
+                .id(entity.getId())
+                .name(entity.getName())
+                .phone(entity.getPhone())
+                .region(entity.getRegion())
+                .isEmergency(entity.getIsEmergency())
+                .build();
+    }
 }
