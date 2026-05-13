@@ -38,3 +38,8 @@ out/
 
 ### Environment ###
 .env
+
+V1__init_schema_v4_2.sql
+
+### Vibe Coding Docs (AI 코딩 참고 문서 — 로컬 전용) ###
+vibe-coding-docs/
