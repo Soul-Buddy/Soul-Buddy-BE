@@ -10,6 +10,7 @@ import com.soulbuddy.ai.dto.PromptContext;
 import com.soulbuddy.ai.filter.SafetyFilter;
 import com.soulbuddy.ai.parser.AiResponseParser;
 import com.soulbuddy.ai.prompt.PromptBuilder;
+import com.soulbuddy.domain.safety.service.SafetyEventService;
 import com.soulbuddy.global.enums.RiskLevel;
 
 import java.util.Collections;
@@ -28,26 +29,33 @@ public class AiChatServiceImpl implements AiChatService {
     private final PromptBuilder promptBuilder;
     private final AiResponseParser aiResponseParser;
     private final SafetyFilter safetyFilter;
+    private final SafetyEventService safetyEventService;
 
-    @Value("${soulbuddy.safety.forced-safety-threshold:2}")
+    @Value("${soulbuddy.safety.forced-safety-threshold:3}")
     private int forcedSafetyThreshold;
 
     @Override
     public ChatResponse process(ChatRequest request, PromptContext context, long recentHighCount) {
         long start = System.currentTimeMillis();
 
-        boolean immediateHigh = safetyFilter.isImmediateHighRisk(request.getMessage());
-
+        // 분류 3종 병렬 (감정 / 위험도 / 개입유형)
         ClassificationResult classification = classifierClient.classifyParallel(request.getMessage());
 
-        boolean forced = safetyFilter.decideForcedSafety(
-                immediateHigh, classification.getRisk(), recentHighCount, forcedSafetyThreshold);
+        // v2.3 Safety Gate
+        //  - immediateHighRisk(키워드 직격 차단) 정책 폐기. 분류기 HIGH 결과만 인정.
+        //  - HIGH 누적 임계치(default 3) 도달 + 같은 세션에 강제 안전 발화 이력 없음 → forced.
+        boolean thresholdReached =
+                safetyFilter.decideForcedSafety(classification.getRisk(), recentHighCount, forcedSafetyThreshold);
+        boolean alreadyEmitted =
+                safetyEventService.hasForcedSafetyEmitted(request.getSessionId());
+        boolean forced = thresholdReached && !alreadyEmitted;
 
         if (forced) {
             ChatResponse safety = aiResponseParser.safetyResponse();
             safety.setEmotionTag(classification.getEmotion());
-            log.info("Forced safety reply triggered. immediateHigh={} classifiedRisk={} ({}ms)",
-                    immediateHigh, classification.getRisk(), System.currentTimeMillis() - start);
+            log.info("Forced safety reply triggered. classifiedRisk={} recentHighCount={} threshold={} ({}ms)",
+                    classification.getRisk(), recentHighCount, forcedSafetyThreshold,
+                    System.currentTimeMillis() - start);
             return safety;
         }
 
@@ -66,11 +74,12 @@ public class AiChatServiceImpl implements AiChatService {
                 .build();
 
         String systemPrompt = promptBuilder.build(finalContext);
+        String userMessage = promptBuilder.buildUserMessage(finalContext, request.getMessage());
 
         String raw = personaLlmClient.call(
                 request.getPersonaType(),
                 systemPrompt,
-                request.getMessage(),
+                userMessage,
                 promptBuilder.recentTurnsTruncated(finalContext.getRecentTurns()));
 
         if (raw == null) {
@@ -84,9 +93,7 @@ public class AiChatServiceImpl implements AiChatService {
 
         String assistantMessage = aiResponseParser.sanitizeAssistantMessage(raw);
 
-        if (classification.getRisk() == RiskLevel.MEDIUM) {
-            assistantMessage = assistantMessage + SafetyFilter.MEDIUM_RECOMMEND;
-        }
+        // v2.3 — MEDIUM_RECOMMEND 안내 텍스트 부착 정책 폐기.
 
         ChatResponse response = ChatResponse.builder()
                 .assistantMessage(assistantMessage)

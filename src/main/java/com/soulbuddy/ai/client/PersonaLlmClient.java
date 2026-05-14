@@ -21,12 +21,18 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PersonaLlmClient {
 
-    private static final int MAX_TOKENS = 505;
+    private static final int MAX_TOKENS = 700;
     private static final double TEMPERATURE = 0.5;
 
     private final ClovaHttpClient clovaHttpClient;
     private final ClovaProperties clovaProperties;
 
+    /**
+     * HCX-005 ft 호출.
+     * @param userMessage v2.3 4블록 구조화 텍스트 (PromptBuilder.buildUserMessage 결과).
+     *                    [내담자 발화] / [감정] / [개입유형] / [관련 과거 대화] 블록.
+     *                    B(위험도)는 포함되지 않는다.
+     */
     public String call(PersonaType persona, String systemPrompt, String userMessage,
                        List<PromptContext.TurnMessage> recentTurns) {
         String endpoint = persona == PersonaType.FRIEND

@@ -10,11 +10,14 @@ import com.soulbuddy.domain.chat.entity.ChatSession;
 import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
 import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
 import com.soulbuddy.domain.emotion.service.EmotionLogService;
+import com.soulbuddy.domain.summary.entity.Summary;
+import com.soulbuddy.domain.summary.repository.SummaryRepository;
 import com.soulbuddy.domain.user.service.ProfileQueryService;
 import com.soulbuddy.global.enums.*;
 import com.soulbuddy.global.exception.BusinessException;
 import com.soulbuddy.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -23,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Collections;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -34,6 +38,7 @@ public class ChatService {
     private final EmotionLogService emotionLogService;
     private final ProfileQueryService profileQueryService;
     private final com.soulbuddy.domain.safety.service.SafetyEventService safetyEventService;
+    private final SummaryRepository summaryRepository;
 
     // POST /api/chat
     public ChatResponse processChat(Long userId, ChatRequest request) {
@@ -43,6 +48,24 @@ public class ChatService {
 
         if (!session.isActive()) {
             throw new BusinessException(ErrorCode.SESSION_002);
+        }
+
+        // v2.3 — 페르소나 세션 고정. 세션 시작 시 선택한 페르소나는 세션 종료까지 유지.
+        // request 페르소나가 session 값과 다르면 session 값으로 강제(관대 처리, UX 끊김 방지).
+        if (request.getPersonaType() != null && session.getPersonaType() != null
+                && request.getPersonaType() != session.getPersonaType()) {
+            log.warn("Persona mismatch — request={} session={}. session 값으로 보정.",
+                    request.getPersonaType(), session.getPersonaType());
+            request.setPersonaType(session.getPersonaType());
+        }
+
+        // v2.3 — recentSummary 자동 로드. request 가 null 일 때만 사용자의 가장 최근 세션
+        // 요약(memoryHint)을 DB에서 자동 주입한다.
+        if (request.getRecentSummary() == null || request.getRecentSummary().isBlank()) {
+            summaryRepository.findTopByUserIdOrderByCreatedAtDesc(userId)
+                    .map(Summary::getMemoryHint)
+                    .filter(hint -> hint != null && !hint.isBlank())
+                    .ifPresent(request::setRecentSummary);
         }
 
         // ① USER 메시지 저장 (분류 결과는 AI 호출 후 반영)

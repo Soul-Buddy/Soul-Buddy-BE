@@ -11,4 +11,9 @@ public interface SummaryRepository extends JpaRepository<Summary, Long> {
     Optional<Summary> findBySessionId(String sessionId);
 
     List<Summary> findAllBySessionIdIn(List<String> sessionIds);
+
+    /**
+     * 해당 사용자의 가장 최근(직전) 세션 요약 1건. recentSummary 자동 로드용.
+     */
+    Optional<Summary> findTopByUserIdOrderByCreatedAtDesc(Long userId);
 }

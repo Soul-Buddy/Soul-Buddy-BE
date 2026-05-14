@@ -60,6 +60,15 @@ public class SafetyEventService {
         return safetyEventRepository.findBySessionId(sessionId);
     }
 
+    /**
+     * 같은 세션에 강제 안전 발화 이벤트가 이미 발생했는지 확인.
+     * v2.3 — HIGH 누적 임계치 도달 후 강제 안전 발화는 세션당 1회로 제한한다.
+     */
+    @Transactional(readOnly = true)
+    public boolean hasForcedSafetyEmitted(String sessionId) {
+        return safetyEventRepository.existsBySessionIdAndForcedSafetyTrue(sessionId);
+    }
+
     // 공통 저장 로직
     private void save(Long userId, String sessionId, Long messageId, SafetyEventType type, RiskLevel level, boolean forced) {
         SafetyEvent event = SafetyEvent.builder()
