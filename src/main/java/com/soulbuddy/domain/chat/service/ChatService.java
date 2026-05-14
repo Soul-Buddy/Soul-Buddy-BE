@@ -1,5 +1,6 @@
 package com.soulbuddy.domain.chat.service;
 
+import com.soulbuddy.ai.client.NaverRagReasoningClient;
 import com.soulbuddy.ai.dto.ChatRequest;
 import com.soulbuddy.ai.dto.ChatResponse;
 import com.soulbuddy.ai.dto.PromptContext;
@@ -13,6 +14,8 @@ import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
 import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
 import com.soulbuddy.domain.chat.repository.ChatSessionRunningSummaryRepository;
 import com.soulbuddy.domain.emotion.service.EmotionLogService;
+import com.soulbuddy.domain.rag.service.RagSearchService;
+import com.soulbuddy.domain.rag.service.RagTriggerDetector;
 import com.soulbuddy.domain.summary.entity.Summary;
 import com.soulbuddy.domain.summary.repository.SummaryRepository;
 import com.soulbuddy.domain.user.service.ProfileQueryService;
@@ -21,6 +24,7 @@ import com.soulbuddy.global.exception.BusinessException;
 import com.soulbuddy.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -45,6 +49,12 @@ public class ChatService {
     private final SummaryRepository summaryRepository;
     private final ChatSessionRunningSummaryRepository runningSummaryRepository;
     private final InSessionSummaryService inSessionSummaryService;
+    private final RagTriggerDetector ragTriggerDetector;
+    private final NaverRagReasoningClient naverRagReasoningClient;
+    private final RagSearchService ragSearchService;
+
+    @Value("${soulbuddy.rag.enabled:true}")
+    private boolean ragEnabled;
 
     // POST /api/chat
     public ChatResponse processChat(Long userId, ChatRequest request) {
@@ -112,6 +122,20 @@ public class ChatService {
                         .build())
                 .toList();
 
+        // PR-6 — RAG: 사용자가 명시적으로 과거 대화를 회상하려는 발화일 때만 검색.
+        //   ① RagTriggerDetector 키워드 매칭 → ② RAG Reasoning 으로 query 정제 →
+        //   ③ RagSearchService FULLTEXT 검색 → Top-K 과거 세션 요약을 PromptContext.ragTop3 에 주입.
+        // 검색 실패/결과 0건이면 ragTop3 = null 로 두어 user 메시지 d 블록 통째 생략.
+        List<PromptContext.RagChunkRef> ragRefs = null;
+        if (ragEnabled && ragTriggerDetector.isTriggered(request.getMessage())) {
+            String refinedQuery = naverRagReasoningClient.extractSearchQuery(request.getMessage());
+            if (refinedQuery != null && !refinedQuery.isBlank()) {
+                List<PromptContext.RagChunkRef> found =
+                        ragSearchService.searchTopK(userId, session.getId(), refinedQuery);
+                if (!found.isEmpty()) ragRefs = found;
+            }
+        }
+
         PromptContext context = PromptContext.builder()
                 .personaType(request.getPersonaType())
                 .personalInstruction(profileQueryService.getPersonalInstructionByUserId(userId))
@@ -119,6 +143,7 @@ public class ChatService {
                 .recentSummary(request.getRecentSummary())
                 .recentTurns(recentTurns)
                 .runningSummary(runningSummary)
+                .ragTop3(ragRefs)
                 .firstTurn(firstTurn)
                 .build();
 

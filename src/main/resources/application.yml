@@ -49,6 +49,7 @@ clova:
     classify-intervention: ${CLOVA_REQUEST_ID_CLASSIFY_INTERVENTION:edaf62fa2a674e93bde2402110b203ab}
     summary: ${CLOVA_REQUEST_ID_SUMMARY:65a1b604dcd049b1b8abf221768db7a5}
     summarization: ${CLOVA_REQUEST_ID_SUMMARIZATION:20a826df073d4b67a31771f2d96f1746}
+    rag-reasoning: ${CLOVA_REQUEST_ID_RAG_REASONING:d2914e6895b947b590e81387fbba86fd}
   endpoint:
     persona-friend: ${CLOVA_HCX005_FRIEND_ENDPOINT:/v3/chat-completions/HCX-005}
     persona-counselor: ${CLOVA_HCX005_COUNSELOR_ENDPOINT:/v3/chat-completions/HCX-005}
@@ -57,6 +58,7 @@ clova:
     classify-risk: ${CLOVA_DASH002_RISK_ENDPOINT:/v3/chat-completions/HCX-DASH-002}
     classify-intervention: ${CLOVA_DASH002_INTERVENTION_ENDPOINT:/v3/chat-completions/HCX-DASH-002}
     summarization: ${CLOVA_SUMMARIZATION_ENDPOINT:/v1/api-tools/summarization/v2}
+    rag-reasoning: ${CLOVA_RAG_REASONING_ENDPOINT:/v1/api-tools/rag-reasoning}
 
 soulbuddy:
   prompt:
@@ -68,7 +70,10 @@ soulbuddy:
     threshold: 80         # USER+ASSISTANT 합산 메시지 수 ≥ 이 값일 때 압축 트리거 (PR-2 v2.3)
     batch-size: 20        # 압축 단위 (가장 오래된 메시지 N개를 한 번에 압축)
   rag:
-    enabled: ${RAG_ENABLED:false}
+    enabled: ${RAG_ENABLED:true}                                  # PR-6: 세션 간 기억 RAG 활성화
+    top-k: ${RAG_TOP_K:2}                                         # 검색 결과 Top-N (사용자 결정: 2)
+    min-query-length: ${RAG_MIN_QUERY_LENGTH:2}                   # 너무 짧은 query 무시 (오답 인용 방지)
+    trigger-keywords: ${RAG_TRIGGER_KEYWORDS:기억나,지난번,예전에,말했던,얘기했던,저번에,그때,예전,지난}
 
 jwt:
   secret: ${JWT_SECRET:soul-buddy-default-jwt-secret-please-change-me-32bytes-minimum}

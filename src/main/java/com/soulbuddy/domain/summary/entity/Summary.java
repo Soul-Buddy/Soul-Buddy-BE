@@ -53,6 +53,13 @@ public class Summary {
     @Column(name = "memory_hint", columnDefinition = "TEXT")
     private String memoryHint;
 
+    /**
+     * PR-6 — HCX-007 이 추출한 RAG 인덱싱용 키워드. 콤마 구분 (예: "학교, 시험, 자존감").
+     * rag_chunks.pulling_text 원본이자 향후 사용자 키워드 대시보드 등 재활용 가능.
+     */
+    @Column(name = "keywords", length = 500)
+    private String keywords;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

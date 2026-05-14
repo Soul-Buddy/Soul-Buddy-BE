@@ -10,9 +10,12 @@ import com.soulbuddy.global.enums.RiskLevel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -101,6 +104,7 @@ public class AiResponseParser {
                     .emotionChange(getTextOrNull(node, "emotionChange"))
                     .quoteText(getTextOrNull(node, "quoteText"))
                     .memoryHint(memoryHint)
+                    .keywords(parseKeywords(node.get("keywords")))
                     .build();
         } catch (Exception e) {
             log.error("HCX-007 요약 응답 파싱 실패: {}", e.getMessage());
@@ -109,8 +113,23 @@ public class AiResponseParser {
                     .dominantEmotion(null)
                     .emotionDistribution(new HashMap<>())
                     .memoryHint(null)
+                    .keywords(Collections.emptyList())
                     .build();
         }
+    }
+
+    /** HCX-007 응답의 keywords 배열을 List<String> 으로 파싱. null/비배열은 빈 리스트. */
+    private static List<String> parseKeywords(JsonNode node) {
+        if (node == null || !node.isArray()) return Collections.emptyList();
+        List<String> out = new ArrayList<>(node.size());
+        for (JsonNode v : node) {
+            if (v == null || v.isNull()) continue;
+            String s = v.asText();
+            if (s == null) continue;
+            String trimmed = s.trim();
+            if (!trimmed.isEmpty()) out.add(trimmed);
+        }
+        return out;
     }
 
     private static EmotionTag parseEmotion(String s) {

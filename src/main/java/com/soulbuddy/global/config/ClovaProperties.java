@@ -29,6 +29,8 @@ public class ClovaProperties {
         private String summary;
         /** PR-2 v2.3 — 네이버 요약 API (/v1/api-tools/summarization/v2). */
         private String summarization;
+        /** PR-6 — 네이버 RAG Reasoning API (/v1/api-tools/rag-reasoning). */
+        private String ragReasoning;
     }
 
     @Getter
@@ -42,5 +44,7 @@ public class ClovaProperties {
         private String classifyIntervention;
         /** PR-2 v2.3 — 네이버 요약 API (/v1/api-tools/summarization/v2). */
         private String summarization;
+        /** PR-6 — 네이버 RAG Reasoning API (/v1/api-tools/rag-reasoning). */
+        private String ragReasoning;
     }
 }

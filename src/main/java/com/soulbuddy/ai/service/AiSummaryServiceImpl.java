@@ -6,12 +6,14 @@ import com.soulbuddy.ai.dto.ChatMessageDto;
 import com.soulbuddy.ai.dto.SummaryInputContext;
 import com.soulbuddy.ai.dto.SummaryResult;
 import com.soulbuddy.ai.parser.AiResponseParser;
+import com.soulbuddy.domain.rag.service.RagIndexingService;
 import com.soulbuddy.domain.summary.entity.Summary;
 import com.soulbuddy.domain.summary.repository.SummaryRepository;
 import com.soulbuddy.global.enums.EmotionTag;
 import com.soulbuddy.global.enums.Sender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +34,10 @@ public class AiSummaryServiceImpl implements AiSummaryService {
     private final AiResponseParser aiResponseParser;
     private final SummaryRepository summaryRepository;
     private final ObjectMapper objectMapper;
+    private final RagIndexingService ragIndexingService;
+
+    @Value("${soulbuddy.rag.enabled:true}")
+    private boolean ragEnabled;
 
     @Override
     @Transactional
@@ -52,7 +58,11 @@ public class AiSummaryServiceImpl implements AiSummaryService {
             result = aiResponseParser.parseSummary(raw);
         }
 
-        saveSummary(context.getSessionId(), context.getUserId(), result);
+        Summary saved = saveSummary(context.getSessionId(), context.getUserId(), result);
+        if (ragEnabled && saved != null) {
+            // PR-6 — 세션 종료 직후 RAG 인덱싱 (백그라운드, 응답 시간 영향 없음)
+            ragIndexingService.indexSummary(saved);
+        }
         return result;
     }
 
@@ -115,7 +125,7 @@ public class AiSummaryServiceImpl implements AiSummaryService {
         return sb.toString();
     }
 
-    private void saveSummary(String sessionId, Long userId, SummaryResult result) {
+    private Summary saveSummary(String sessionId, Long userId, SummaryResult result) {
         String distributionJson = null;
         if (result.getEmotionDistribution() != null) {
             try {
@@ -124,7 +134,7 @@ public class AiSummaryServiceImpl implements AiSummaryService {
                 log.warn("emotionDistribution 직렬화 실패: {}", e.getMessage());
             }
         }
-        summaryRepository.save(Summary.builder()
+        return summaryRepository.save(Summary.builder()
                 .sessionId(sessionId)
                 .userId(userId)
                 .summaryText(result.getSummaryText())
@@ -136,6 +146,14 @@ public class AiSummaryServiceImpl implements AiSummaryService {
                 .emotionChange(result.getEmotionChange())
                 .quoteText(result.getQuoteText())
                 .memoryHint(result.getMemoryHint())
+                .keywords(joinKeywords(result.getKeywords()))
                 .build());
+    }
+
+    /** keywords 배열을 콤마 구분 String 으로 직렬화 (DB summaries.keywords 컬럼용, 500자 cap). */
+    private static String joinKeywords(List<String> keywords) {
+        if (keywords == null || keywords.isEmpty()) return null;
+        String joined = String.join(", ", keywords);
+        return joined.length() > 500 ? joined.substring(0, 500) : joined;
     }
 }
