@@ -40,6 +40,7 @@ public class SystemPromptLoader {
     private String classifierRisk;
     private String classifierIntervention;
     private String openingGreeting;
+    private String summarySystem;
 
     public SystemPromptLoader(ResourceLoader resourceLoader) {
         this.resourceLoader = resourceLoader;
@@ -120,7 +121,12 @@ public class SystemPromptLoader {
                 "================================================================\n6. 인사말");
         openingGreeting = extractBetween(content,
                 "6. 인사말 지침",
-                "================================================================\n[ 끝 ]");
+                "================================================================\n7. 세션 요약");
+        // §7 HCX-007 세션 요약 정본 시스템 프롬프트 — [ 주의사항 ] 이전까지.
+        // [ 주의사항 ] / [ 메모 — 추후 재활용 후보 ] 섹션은 LLM 주입 대상 아님.
+        summarySystem = extractBetween(content,
+                "7. 세션 요약 AI (HCX-007 base)",
+                "================================================================\n[ 주의사항");
     }
 
     private String extractBetween(String src, String startMarker, String endMarker) {
@@ -142,6 +148,7 @@ public class SystemPromptLoader {
         classifierRisk = "출력 형식: {\"risk\":\"LOW|MEDIUM|HIGH\"}";
         classifierIntervention = "다음 11종 영문 코드 중 하나만 출력";
         openingGreeting = "";
+        summarySystem = "당신은 정서 지원 대화 세션을 CBT 관점에서 요약하는 AI입니다. 반드시 JSON 형식으로만 응답하세요.";
     }
 
     public String getCommonRules() {
@@ -171,6 +178,11 @@ public class SystemPromptLoader {
 
     public String getOpeningGreeting() {
         return openingGreeting == null ? "" : openingGreeting;
+    }
+
+    /** §7 HCX-007 세션 요약 정본 시스템 프롬프트. */
+    public String getSummarySystem() {
+        return summarySystem == null ? "" : summarySystem;
     }
 
     public Map<String, Object> debugInfo() {

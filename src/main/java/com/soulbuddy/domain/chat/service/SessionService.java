@@ -2,9 +2,11 @@ package com.soulbuddy.domain.chat.service;
 
 import com.soulbuddy.ai.dto.ChatMessageDto;
 import com.soulbuddy.ai.dto.OpeningContext;
+import com.soulbuddy.ai.dto.SummaryInputContext;
 import com.soulbuddy.ai.dto.SummaryResult;
 import com.soulbuddy.ai.service.AiChatService;
 import com.soulbuddy.ai.service.AiSummaryService;
+import com.soulbuddy.domain.emotion.repository.EmotionLogRepository;
 import com.soulbuddy.domain.chat.dto.response.SessionDeleteResponse;
 import com.soulbuddy.domain.chat.dto.response.SessionEndResponse;
 import com.soulbuddy.domain.chat.dto.response.SessionItemResponse;
@@ -26,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,6 +43,7 @@ public class SessionService {
     private final AiChatService aiChatService;
     private final AiSummaryService aiSummaryService;
     private final EmotionLogService emotionLogService;
+    private final EmotionLogRepository emotionLogRepository;
     private final com.soulbuddy.domain.summary.service.SummaryService summaryService;
 
     // POST /api/sessions
@@ -168,7 +172,28 @@ public class SessionService {
                         .build())
                 .toList();
 
-        SummaryResult result = aiSummaryService.summarize(sessionId, userId, messageDtos);
+        // v2.3 — HCX-007 입력에 [세션 메타] / [대화] 두 블록을 BE 가 조립.
+        // sessionEmotionCounts 는 emotion_logs 세션 단위 집계.
+        Map<EmotionTag, Long> sessionEmotionCounts = new EnumMap<>(EmotionTag.class);
+        for (EmotionLogRepository.EmotionTagCount row :
+                emotionLogRepository.countEmotionTagBySessionId(sessionId)) {
+            if (row.getEmotionTag() != null) {
+                sessionEmotionCounts.put(row.getEmotionTag(),
+                        row.getCount() != null ? row.getCount() : 0L);
+            }
+        }
+
+        SummaryInputContext ctx = SummaryInputContext.builder()
+                .sessionId(sessionId)
+                .userId(userId)
+                .persona(session.getPersonaType())
+                .preChatEmotion(session.getPreChatEmotion())
+                .turnCount(messageDtos.size())
+                .sessionEmotionCounts(sessionEmotionCounts)
+                .messages(messageDtos)
+                .build();
+
+        SummaryResult result = aiSummaryService.summarize(ctx);
 
         session.end(SummaryStatus.CREATED);
 

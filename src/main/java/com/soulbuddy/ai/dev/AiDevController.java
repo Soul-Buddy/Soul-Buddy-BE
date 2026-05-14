@@ -5,9 +5,12 @@ import com.soulbuddy.ai.dto.ChatRequest;
 import com.soulbuddy.ai.dto.ChatResponse;
 import com.soulbuddy.ai.dto.OpeningContext;
 import com.soulbuddy.ai.dto.PromptContext;
+import com.soulbuddy.ai.dto.SummaryInputContext;
 import com.soulbuddy.ai.dto.SummaryResult;
 import com.soulbuddy.ai.service.AiChatService;
 import com.soulbuddy.ai.service.AiSummaryService;
+import com.soulbuddy.global.enums.EmotionTag;
+import com.soulbuddy.global.enums.PersonaType;
 import com.soulbuddy.global.response.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.Getter;
@@ -58,9 +61,16 @@ public class AiDevController {
 
     @PostMapping("/summarize")
     public ApiResponse<SummaryResult> summarize(@Valid @RequestBody SummarizeRequest body) {
-        String sessionId = body.getSessionId() != null ? body.getSessionId() : "dev-test-session";
-        Long userId = body.getUserId() != null ? body.getUserId() : 0L;
-        SummaryResult result = aiSummaryService.summarize(sessionId, userId, body.getMessages());
+        SummaryInputContext ctx = SummaryInputContext.builder()
+                .sessionId(body.getSessionId() != null ? body.getSessionId() : "dev-test-session")
+                .userId(body.getUserId() != null ? body.getUserId() : 0L)
+                .persona(body.getPersona())
+                .preChatEmotion(body.getPreChatEmotion())
+                .turnCount(body.getMessages() != null ? body.getMessages().size() : 0)
+                .sessionEmotionCounts(body.getSessionEmotionCounts())
+                .messages(body.getMessages())
+                .build();
+        SummaryResult result = aiSummaryService.summarize(ctx);
         return ApiResponse.success(result);
     }
 
@@ -81,6 +91,9 @@ public class AiDevController {
     public static class SummarizeRequest {
         private String sessionId;
         private Long userId;
+        private PersonaType persona;
+        private EmotionTag preChatEmotion;
+        private Map<EmotionTag, Long> sessionEmotionCounts;
         private List<ChatMessageDto> messages;
     }
 }

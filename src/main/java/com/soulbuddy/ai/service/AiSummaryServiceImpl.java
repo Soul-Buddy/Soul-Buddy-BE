@@ -3,23 +3,30 @@ package com.soulbuddy.ai.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.soulbuddy.ai.client.SummaryLlmClient;
 import com.soulbuddy.ai.dto.ChatMessageDto;
+import com.soulbuddy.ai.dto.SummaryInputContext;
 import com.soulbuddy.ai.dto.SummaryResult;
 import com.soulbuddy.ai.parser.AiResponseParser;
 import com.soulbuddy.domain.summary.entity.Summary;
 import com.soulbuddy.domain.summary.repository.SummaryRepository;
+import com.soulbuddy.global.enums.EmotionTag;
 import com.soulbuddy.global.enums.Sender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.format.DateTimeFormatter;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AiSummaryServiceImpl implements AiSummaryService {
+
+    private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final SummaryLlmClient summaryLlmClient;
     private final AiResponseParser aiResponseParser;
@@ -28,11 +35,12 @@ public class AiSummaryServiceImpl implements AiSummaryService {
 
     @Override
     @Transactional
-    public SummaryResult summarize(String sessionId, Long userId, List<ChatMessageDto> messages) {
-        String dialog = buildDialog(messages);
+    public SummaryResult summarize(SummaryInputContext context) {
+        String userMessage = buildStructuredInput(context);
         long start = System.currentTimeMillis();
-        String raw = summaryLlmClient.summarize(dialog);
-        log.info("HCX-007 요약 응답 시간: {}ms", System.currentTimeMillis() - start);
+        String raw = summaryLlmClient.summarize(userMessage);
+        log.info("HCX-007 요약 응답 시간: {}ms (sessionId={})",
+                System.currentTimeMillis() - start, context.getSessionId());
 
         SummaryResult result;
         if (raw == null) {
@@ -44,8 +52,67 @@ public class AiSummaryServiceImpl implements AiSummaryService {
             result = aiResponseParser.parseSummary(raw);
         }
 
-        saveSummary(sessionId, userId, result);
+        saveSummary(context.getSessionId(), context.getUserId(), result);
         return result;
+    }
+
+    /**
+     * system_prompts_final.txt §7 입력 포맷:
+     *   [세션 메타]
+     *   persona: ...
+     *   preChatEmotion: ...
+     *   turnCount: ...
+     *   sessionEmotionCounts: { HAPPY:0, SAD:0, ... }
+     *
+     *   [대화]
+     *   (1) [createdAt ISO] 사용자: ...
+     *   (2) [createdAt ISO] AI:    ...
+     */
+    String buildStructuredInput(SummaryInputContext ctx) {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("[세션 메타]\n");
+        sb.append("persona: ").append(ctx.getPersona() != null ? ctx.getPersona().name() : "null").append('\n');
+        sb.append("preChatEmotion: ")
+          .append(ctx.getPreChatEmotion() != null ? ctx.getPreChatEmotion().name() : "null").append('\n');
+        sb.append("turnCount: ").append(ctx.getTurnCount()).append('\n');
+        sb.append("sessionEmotionCounts: ").append(formatEmotionCounts(ctx.getSessionEmotionCounts())).append("\n\n");
+
+        sb.append("[대화]\n");
+        List<ChatMessageDto> messages = ctx.getMessages();
+        if (messages != null) {
+            int idx = 1;
+            for (ChatMessageDto m : messages) {
+                String role = m.getSender() == Sender.USER ? "사용자"
+                        : (m.getSender() == Sender.ASSISTANT ? "AI" : "시스템");
+                String ts = m.getCreatedAt() != null ? m.getCreatedAt().format(ISO) : "";
+                sb.append('(').append(idx++).append(") [").append(ts).append("] ")
+                  .append(role).append(": ")
+                  .append(m.getContent() != null ? m.getContent() : "")
+                  .append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    private String formatEmotionCounts(Map<EmotionTag, Long> counts) {
+        // 6종 모두 출력 (없는 키도 0). system prompt 의 6키 스키마와 일치시킴.
+        Map<EmotionTag, Long> filled = new EnumMap<>(EmotionTag.class);
+        for (EmotionTag t : EmotionTag.values()) {
+            filled.put(t, 0L);
+        }
+        if (counts != null) {
+            counts.forEach((k, v) -> { if (k != null && v != null) filled.put(k, v); });
+        }
+        StringBuilder sb = new StringBuilder("{ ");
+        boolean first = true;
+        for (Map.Entry<EmotionTag, Long> e : filled.entrySet()) {
+            if (!first) sb.append(", ");
+            sb.append(e.getKey().name()).append(':').append(e.getValue());
+            first = false;
+        }
+        sb.append(" }");
+        return sb.toString();
     }
 
     private void saveSummary(String sessionId, Long userId, SummaryResult result) {
@@ -70,15 +137,5 @@ public class AiSummaryServiceImpl implements AiSummaryService {
                 .quoteText(result.getQuoteText())
                 .memoryHint(result.getMemoryHint())
                 .build());
-    }
-
-    private String buildDialog(List<ChatMessageDto> messages) {
-        StringBuilder sb = new StringBuilder();
-        for (ChatMessageDto m : messages) {
-            String role = m.getSender() == Sender.USER ? "사용자"
-                    : (m.getSender() == Sender.ASSISTANT ? "AI" : "시스템");
-            sb.append(role).append(": ").append(m.getContent()).append('\n');
-        }
-        return sb.toString();
     }
 }

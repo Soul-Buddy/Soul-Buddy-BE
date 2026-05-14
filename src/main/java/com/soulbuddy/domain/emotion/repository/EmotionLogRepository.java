@@ -14,6 +14,14 @@ public interface EmotionLogRepository extends JpaRepository<EmotionLog, Long> {
     @Query("SELECT e.emotionTag AS emotionTag, COUNT(e) AS count FROM EmotionLog e WHERE e.userId = :userId GROUP BY e.emotionTag")
     List<EmotionTagCount> countEmotionTagByUserId(@Param("userId") Long userId);
 
+    /**
+     * 세션 단위 감정 누적 카운트.
+     * HCX-007 요약 호출 시 [세션 메타].sessionEmotionCounts 채우기용 (v2.3).
+     */
+    @Query("SELECT e.emotionTag AS emotionTag, COUNT(e) AS count FROM EmotionLog e " +
+            "WHERE e.sessionId = :sessionId GROUP BY e.emotionTag")
+    List<EmotionTagCount> countEmotionTagBySessionId(@Param("sessionId") String sessionId);
+
     interface EmotionTagCount {
         EmotionTag getEmotionTag();
         Long getCount();
