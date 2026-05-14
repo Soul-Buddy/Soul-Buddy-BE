@@ -20,6 +20,12 @@ public class PromptContext {
     private String recentSummary;
     private List<TurnMessage> recentTurns;
 
+    /**
+     * PR-2 v2.3 — 세션 내 슬라이딩 압축 결과 (running_summary).
+     * 압축 발생한 세션에서만 채워짐. system 프롬프트 [세션 진행 요약] 블록에 부착.
+     */
+    private String runningSummary;
+
     private EmotionTag classifiedEmotion;
     private RiskLevel classifiedRisk;
     private InterventionType classifiedIntervention;

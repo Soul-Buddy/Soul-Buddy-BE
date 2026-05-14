@@ -48,6 +48,7 @@ clova:
     classify-risk: ${CLOVA_REQUEST_ID_CLASSIFY_RISK:f37e452b8e9f4731b2a68e11b3cdb960}
     classify-intervention: ${CLOVA_REQUEST_ID_CLASSIFY_INTERVENTION:edaf62fa2a674e93bde2402110b203ab}
     summary: ${CLOVA_REQUEST_ID_SUMMARY:65a1b604dcd049b1b8abf221768db7a5}
+    summarization: ${CLOVA_REQUEST_ID_SUMMARIZATION:20a826df073d4b67a31771f2d96f1746}
   endpoint:
     persona-friend: ${CLOVA_HCX005_FRIEND_ENDPOINT:/v3/chat-completions/HCX-005}
     persona-counselor: ${CLOVA_HCX005_COUNSELOR_ENDPOINT:/v3/chat-completions/HCX-005}
@@ -55,6 +56,7 @@ clova:
     classify-emotion: ${CLOVA_DASH002_EMOTION_ENDPOINT:/v3/chat-completions/HCX-DASH-002}
     classify-risk: ${CLOVA_DASH002_RISK_ENDPOINT:/v3/chat-completions/HCX-DASH-002}
     classify-intervention: ${CLOVA_DASH002_INTERVENTION_ENDPOINT:/v3/chat-completions/HCX-DASH-002}
+    summarization: ${CLOVA_SUMMARIZATION_ENDPOINT:/v1/api-tools/summarization/v2}
 
 soulbuddy:
   prompt:
@@ -62,6 +64,9 @@ soulbuddy:
   safety:
     forced-safety-threshold: 3
     counseling-center-path: ${COUNSELING_CENTER_PATH:/counseling-center}
+  in-session-summary:
+    threshold: 80         # USER+ASSISTANT 합산 메시지 수 ≥ 이 값일 때 압축 트리거 (PR-2 v2.3)
+    batch-size: 20        # 압축 단위 (가장 오래된 메시지 N개를 한 번에 압축)
   rag:
     enabled: ${RAG_ENABLED:false}
 

@@ -4,11 +4,14 @@ import com.soulbuddy.ai.dto.ChatRequest;
 import com.soulbuddy.ai.dto.ChatResponse;
 import com.soulbuddy.ai.dto.PromptContext;
 import com.soulbuddy.ai.service.AiChatService;
+import com.soulbuddy.ai.service.InSessionSummaryService;
 import com.soulbuddy.domain.chat.dto.response.ChatHistoryResponse;
 import com.soulbuddy.domain.chat.entity.ChatMessage;
 import com.soulbuddy.domain.chat.entity.ChatSession;
+import com.soulbuddy.domain.chat.entity.ChatSessionRunningSummary;
 import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
 import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
+import com.soulbuddy.domain.chat.repository.ChatSessionRunningSummaryRepository;
 import com.soulbuddy.domain.emotion.service.EmotionLogService;
 import com.soulbuddy.domain.summary.entity.Summary;
 import com.soulbuddy.domain.summary.repository.SummaryRepository;
@@ -25,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -39,6 +43,8 @@ public class ChatService {
     private final ProfileQueryService profileQueryService;
     private final com.soulbuddy.domain.safety.service.SafetyEventService safetyEventService;
     private final SummaryRepository summaryRepository;
+    private final ChatSessionRunningSummaryRepository runningSummaryRepository;
+    private final InSessionSummaryService inSessionSummaryService;
 
     // POST /api/chat
     public ChatResponse processChat(Long userId, ChatRequest request) {
@@ -78,11 +84,26 @@ public class ChatService {
         );
 
         // ② PromptContext 조립
-        List<ChatMessage> recent = chatMessageRepository
-                .findTop20BySessionIdOrderByCreatedAtDesc(session.getId());
-        Collections.reverse(recent);
+        // PR-2 v2.3 — running_summary 로딩. 압축 이력 있는 세션은 마지막 미요약 구간만 messages 에 포함.
+        Optional<ChatSessionRunningSummary> runningSummaryOpt =
+                runningSummaryRepository.findBySessionId(session.getId());
+        Long lastCompactedId = runningSummaryOpt
+                .map(ChatSessionRunningSummary::getLastCompactedMessageId)
+                .orElse(0L);
+        String runningSummary = runningSummaryOpt
+                .map(ChatSessionRunningSummary::getRunningSummary)
+                .orElse(null);
 
-        boolean firstTurn = recent.stream().filter(m -> m.getSender() == Sender.USER).count() == 1;
+        List<ChatMessage> recent = (lastCompactedId == null || lastCompactedId == 0L)
+                ? chatMessageRepository.findTop20BySessionIdOrderByCreatedAtDesc(session.getId())
+                : chatMessageRepository.findBySessionIdAndIdGreaterThanOrderByCreatedAtAsc(
+                        session.getId(), lastCompactedId);
+        if (lastCompactedId == null || lastCompactedId == 0L) {
+            Collections.reverse(recent);
+        }
+
+        boolean firstTurn = recent.stream().filter(m -> m.getSender() == Sender.USER).count() == 1
+                && (lastCompactedId == null || lastCompactedId == 0L);
 
         List<PromptContext.TurnMessage> recentTurns = recent.stream()
                 .map(m -> PromptContext.TurnMessage.builder()
@@ -97,8 +118,12 @@ public class ChatService {
                 .nickname(profileQueryService.getNicknameByUserId(userId))
                 .recentSummary(request.getRecentSummary())
                 .recentTurns(recentTurns)
+                .runningSummary(runningSummary)
                 .firstTurn(firstTurn)
                 .build();
+
+        // PR-2 v2.3 — 80턴 도달 시 백그라운드 압축 트리거. 채팅 응답 흐름에 지연 0.
+        inSessionSummaryService.compactIfNeeded(session.getId());
 
         // ③ recentHighCount 산출
         long recentHighCount = chatMessageRepository

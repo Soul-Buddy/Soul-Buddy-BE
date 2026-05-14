@@ -69,6 +69,47 @@ public class ClovaHttpClient {
         }
     }
 
+    /**
+     * 네이버 요약 API (/v1/api-tools/summarization/v2) 전용 호출.
+     * 응답 구조가 chat-completions 와 다름: result.text 가 결과.
+     * 실패 시 null.
+     */
+    public String callSummarization(String endpoint, String requestId, Map<String, Object> body) {
+        try {
+            JsonNode response = clovaWebClient.post()
+                    .uri(endpoint)
+                    .header("X-NCP-CLOVASTUDIO-REQUEST-ID", requestId)
+                    .header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+                    .bodyValue(body)
+                    .retrieve()
+                    .bodyToMono(JsonNode.class)
+                    .timeout(Duration.ofSeconds(clovaProperties.getTimeoutSeconds()))
+                    .retryWhen(Retry.backoff(clovaProperties.getMaxRetries(), Duration.ofMillis(500))
+                            .filter(this::isRetryable))
+                    .onErrorResume(e -> {
+                        log.error("CLOVA 요약 API 호출 실패 endpoint={} err={}", endpoint, e.getMessage());
+                        return Mono.empty();
+                    })
+                    .block();
+
+            if (response == null) return null;
+            JsonNode status = response.get("status");
+            if (status != null && status.has("code")
+                    && !"20000".equals(status.get("code").asText())) {
+                log.warn("CLOVA 요약 API 비정상 응답 status={} body={}", status.toString(), response);
+                return null;
+            }
+            JsonNode result = response.get("result");
+            if (result == null) return null;
+            JsonNode text = result.get("text");
+            if (text == null) return null;
+            return text.asText();
+        } catch (Exception e) {
+            log.error("CLOVA 요약 API 호출 예외 endpoint={} err={}", endpoint, e.getMessage(), e);
+            return null;
+        }
+    }
+
     public Map<String, Object> buildBody(List<Map<String, String>> messages,
                                          double temperature, int maxTokens) {
         Map<String, Object> body = new LinkedHashMap<>();

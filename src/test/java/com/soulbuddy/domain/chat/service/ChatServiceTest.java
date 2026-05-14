@@ -4,10 +4,12 @@ import com.soulbuddy.ai.dto.ChatRequest;
 import com.soulbuddy.ai.dto.ChatResponse;
 import com.soulbuddy.ai.dto.PromptContext;
 import com.soulbuddy.ai.service.AiChatService;
+import com.soulbuddy.ai.service.InSessionSummaryService;
 import com.soulbuddy.domain.chat.entity.ChatMessage;
 import com.soulbuddy.domain.chat.entity.ChatSession;
 import com.soulbuddy.domain.chat.repository.ChatMessageRepository;
 import com.soulbuddy.domain.chat.repository.ChatSessionRepository;
+import com.soulbuddy.domain.chat.repository.ChatSessionRunningSummaryRepository;
 import com.soulbuddy.domain.emotion.service.EmotionLogService;
 import com.soulbuddy.domain.safety.service.SafetyEventService;
 import com.soulbuddy.domain.summary.entity.Summary;
@@ -55,6 +57,8 @@ class ChatServiceTest {
     @Mock private ProfileQueryService profileQueryService;
     @Mock private SafetyEventService safetyEventService;
     @Mock private SummaryRepository summaryRepository;
+    @Mock private ChatSessionRunningSummaryRepository runningSummaryRepository;
+    @Mock private InSessionSummaryService inSessionSummaryService;
 
     @InjectMocks
     private ChatService chatService;

@@ -21,4 +21,14 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     // POST /api/chat - recentHighCount 산출
     long countBySessionIdAndRiskLevel(String sessionId, RiskLevel riskLevel);
+
+    // PR-2 v2.3 — last_compacted_message_id 이후 미요약 구간만 조회
+    List<ChatMessage> findBySessionIdAndIdGreaterThanOrderByCreatedAtAsc(String sessionId, Long messageId);
+
+    // PR-2 v2.3 — 미요약 구간 개수 (압축 트리거 판정용)
+    long countBySessionIdAndIdGreaterThan(String sessionId, Long messageId);
+
+    // PR-2 v2.3 — 미요약 구간 중 가장 오래된 N개 (압축 대상). Pageable 로 N 제어.
+    List<ChatMessage> findBySessionIdAndIdGreaterThanOrderByIdAsc(String sessionId, Long messageId,
+                                                                  org.springframework.data.domain.Pageable pageable);
 }

@@ -36,7 +36,8 @@ public class PromptBuilder {
 
     private static final int PERSONAL_INSTRUCTION_MAX = 600;
     private static final int RECENT_SUMMARY_MAX = 200;
-    private static final int RECENT_TURNS_MAX = 10;
+    private static final int RUNNING_SUMMARY_MAX = 1500;
+    private static final int RECENT_TURNS_MAX = 80;
 
     private final SystemPromptLoader loader;
 
@@ -72,6 +73,14 @@ public class PromptBuilder {
         if (context.getRecentSummary() != null && !context.getRecentSummary().isBlank()) {
             sb.append("[직전 세션 요약]\n")
               .append(truncate(context.getRecentSummary(), RECENT_SUMMARY_MAX))
+              .append("\n\n");
+        }
+
+        // PR-2 v2.3 — 세션 내 슬라이딩 압축 결과 (현재 세션의 오래된 구간을 압축한 요약).
+        // 80턴 이상 진행된 세션에서만 채워짐. last_compacted_message_id 이전 메시지의 요약본.
+        if (context.getRunningSummary() != null && !context.getRunningSummary().isBlank()) {
+            sb.append("[세션 진행 요약]\n")
+              .append(truncate(context.getRunningSummary(), RUNNING_SUMMARY_MAX))
               .append("\n\n");
         }
 

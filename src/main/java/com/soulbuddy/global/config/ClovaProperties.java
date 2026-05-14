@@ -27,6 +27,8 @@ public class ClovaProperties {
         private String classifyRisk;
         private String classifyIntervention;
         private String summary;
+        /** PR-2 v2.3 — 네이버 요약 API (/v1/api-tools/summarization/v2). */
+        private String summarization;
     }
 
     @Getter
@@ -38,5 +40,7 @@ public class ClovaProperties {
         private String classifyEmotion;
         private String classifyRisk;
         private String classifyIntervention;
+        /** PR-2 v2.3 — 네이버 요약 API (/v1/api-tools/summarization/v2). */
+        private String summarization;
     }
 }
