@@ -34,6 +34,9 @@ public class AiChatServiceImpl implements AiChatService {
     @Value("${soulbuddy.safety.forced-safety-threshold:3}")
     private int forcedSafetyThreshold;
 
+    @Value("${soulbuddy.safety.counseling-center-path:/counseling-center}")
+    private String counselingCenterPath;
+
     @Override
     public ChatResponse process(ChatRequest request, PromptContext context, long recentHighCount) {
         long start = System.currentTimeMillis();
@@ -53,6 +56,9 @@ public class AiChatServiceImpl implements AiChatService {
         if (forced) {
             ChatResponse safety = aiResponseParser.safetyResponse();
             safety.setEmotionTag(classification.getEmotion());
+            // v2.3 — FE 신호: 상담센터 이동 / 대화 이어가기 선택 UI 노출.
+            safety.setShowSafetyChoice(true);
+            safety.setCounselingCenterPath(counselingCenterPath);
             log.info("Forced safety reply triggered. classifiedRisk={} recentHighCount={} threshold={} ({}ms)",
                     classification.getRisk(), recentHighCount, forcedSafetyThreshold,
                     System.currentTimeMillis() - start);

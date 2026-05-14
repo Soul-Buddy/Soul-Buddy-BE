@@ -60,6 +60,7 @@ class AiChatServiceImplTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(aiChatService, "forcedSafetyThreshold", 3);
+        ReflectionTestUtils.setField(aiChatService, "counselingCenterPath", "/counseling-center");
         request = ChatRequest.builder()
                 .sessionId(SESSION_ID)
                 .personaType(PersonaType.COUNSELOR)
@@ -93,6 +94,9 @@ class AiChatServiceImplTest {
 
         assertThat(response.isForcedSafety()).isTrue();
         assertThat(response.getAssistantMessage()).isEqualTo(SafetyFilter.SAFETY_MESSAGE);
+        // v2.3 FE 신호: showSafetyChoice / counselingCenterPath
+        assertThat(response.isShowSafetyChoice()).isTrue();
+        assertThat(response.getCounselingCenterPath()).isEqualTo("/counseling-center");
         // 페르소나 LLM 호출하지 않음
         verify(personaLlmClient, never()).call(any(), anyString(), anyString(), anyList());
     }
@@ -120,6 +124,9 @@ class AiChatServiceImplTest {
         assertThat(response.isForcedSafety()).isFalse();
         assertThat(response.getRiskLevel()).isEqualTo(RiskLevel.HIGH);  // 분류는 HIGH 그대로 기록
         assertThat(response.getAssistantMessage()).isEqualTo("정상 페르소나 응답");
+        // v2.3 FE 신호: 일반 응답에서는 default
+        assertThat(response.isShowSafetyChoice()).isFalse();
+        assertThat(response.getCounselingCenterPath()).isNull();
         // 안전 발화 응답으로 교체하지 않음
         verify(aiResponseParser, never()).safetyResponse();
     }

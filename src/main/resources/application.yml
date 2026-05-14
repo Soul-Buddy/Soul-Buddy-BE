@@ -60,7 +60,8 @@ soulbuddy:
   prompt:
     system-prompts-path: ${SYSTEM_PROMPTS_PATH:classpath:prompts/system_prompts_final.txt}
   safety:
-    forced-safety-threshold: 2
+    forced-safety-threshold: 3
+    counseling-center-path: ${COUNSELING_CENTER_PATH:/counseling-center}
   rag:
     enabled: ${RAG_ENABLED:false}
 
