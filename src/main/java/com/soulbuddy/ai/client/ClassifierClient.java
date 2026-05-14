@@ -30,7 +30,7 @@ import java.util.concurrent.Executors;
 public class ClassifierClient {
 
     private static final int MAX_TOKENS = 100;
-    private static final double TEMPERATURE = 0.0;
+    private static final double TEMPERATURE = 0.3;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     private static final Executor PARALLEL_EXECUTOR = Executors.newFixedThreadPool(6);
