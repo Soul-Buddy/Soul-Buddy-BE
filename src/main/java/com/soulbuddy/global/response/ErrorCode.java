@@ -21,7 +21,7 @@ public enum ErrorCode {
     SESSION_002("SESSION_002", "이미 종료된 세션입니다."),
 
     AI_001("AI_001", "LLM(CLOVA Studio) API 호출에 실패했습니다."),
-    AI_002("AI_002", "AI 응답 파싱에 실패했습니다 (fallback 반환)."),
+    AI_002("AI_002", "AI 응답 파싱에 실패했습니다."),
     AI_003("AI_003", "위험이 감지되어 안전 응답을 반환합니다."),
 
     RAG_001("RAG_001", "Vector Store 검색에 실패했습니다 (RAG 건너뜀)."),

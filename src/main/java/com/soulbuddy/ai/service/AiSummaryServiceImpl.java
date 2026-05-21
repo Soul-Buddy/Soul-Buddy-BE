@@ -11,6 +11,8 @@ import com.soulbuddy.domain.summary.entity.Summary;
 import com.soulbuddy.domain.summary.repository.SummaryRepository;
 import com.soulbuddy.global.enums.EmotionTag;
 import com.soulbuddy.global.enums.Sender;
+import com.soulbuddy.global.exception.BusinessException;
+import com.soulbuddy.global.response.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -48,15 +49,11 @@ public class AiSummaryServiceImpl implements AiSummaryService {
         log.info("HCX-007 요약 응답 시간: {}ms (sessionId={})",
                 System.currentTimeMillis() - start, context.getSessionId());
 
-        SummaryResult result;
         if (raw == null) {
-            result = SummaryResult.builder()
-                    .summaryText("요약 생성에 실패했습니다.")
-                    .emotionDistribution(new HashMap<>())
-                    .build();
-        } else {
-            result = aiResponseParser.parseSummary(raw);
+            log.error("HCX-007 호출 실패 — raw=null (sessionId={})", context.getSessionId());
+            throw new BusinessException(ErrorCode.AI_001);
         }
+        SummaryResult result = aiResponseParser.parseSummary(raw);
 
         Summary saved = saveSummary(context.getSessionId(), context.getUserId(), result);
         if (ragEnabled && saved != null) {

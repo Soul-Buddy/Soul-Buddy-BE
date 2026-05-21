@@ -12,6 +12,8 @@ import com.soulbuddy.ai.parser.AiResponseParser;
 import com.soulbuddy.ai.prompt.PromptBuilder;
 import com.soulbuddy.domain.safety.service.SafetyEventService;
 import com.soulbuddy.global.enums.RiskLevel;
+import com.soulbuddy.global.exception.BusinessException;
+import com.soulbuddy.global.response.ErrorCode;
 
 import java.util.Collections;
 import lombok.RequiredArgsConstructor;
@@ -89,12 +91,8 @@ public class AiChatServiceImpl implements AiChatService {
                 promptBuilder.recentTurnsTruncated(finalContext.getRecentTurns()));
 
         if (raw == null) {
-            log.warn("Persona LLM 호출 실패 → fallback 반환");
-            ChatResponse fallback = aiResponseParser.fallback();
-            fallback.setEmotionTag(classification.getEmotion());
-            fallback.setRiskLevel(classification.getRisk());
-            fallback.setInterventionType(classification.getIntervention());
-            return fallback;
+            log.error("Persona LLM (HCX-005-{}) 호출 실패 — raw=null", request.getPersonaType());
+            throw new BusinessException(ErrorCode.AI_001);
         }
 
         String assistantMessage = aiResponseParser.sanitizeAssistantMessage(raw);
@@ -147,10 +145,8 @@ public class AiChatServiceImpl implements AiChatService {
                 Collections.emptyList());
 
         if (raw == null) {
-            log.warn("Opening LLM 호출 실패 → 기본 인사말 fallback");
-            return ctx.getPersonaType() == com.soulbuddy.global.enums.PersonaType.FRIEND
-                    ? "안녕! 오늘 하루 어땠어? 편하게 얘기해줘."
-                    : "안녕하세요. 오늘 어떤 이야기를 나누고 싶으신가요?";
+            log.error("Opening LLM (HCX-005-{}) 호출 실패 — raw=null", ctx.getPersonaType());
+            throw new BusinessException(ErrorCode.AI_001);
         }
 
         String message = aiResponseParser.sanitizeAssistantMessage(raw);

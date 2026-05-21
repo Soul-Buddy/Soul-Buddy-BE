@@ -2,6 +2,8 @@ package com.soulbuddy.ai.prompt;
 
 import com.soulbuddy.global.enums.InterventionType;
 import com.soulbuddy.global.enums.PersonaType;
+import com.soulbuddy.global.exception.BusinessException;
+import com.soulbuddy.global.response.ErrorCode;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,9 +53,8 @@ public class SystemPromptLoader {
         try {
             Resource resource = resourceLoader.getResource(promptsPath);
             if (!resource.exists()) {
-                log.warn("system_prompts_final.txt 파일을 찾을 수 없습니다: {}", promptsPath);
-                applyDefaults();
-                return;
+                log.error("system_prompts_final.txt 파일을 찾을 수 없습니다: {}", promptsPath);
+                throw new BusinessException(ErrorCode.AI_001);
             }
             String content;
             try (BufferedReader reader = new BufferedReader(
@@ -68,9 +69,11 @@ public class SystemPromptLoader {
             parse(content);
             log.info("system_prompts_final.txt 로드 완료. persona={}, intervention={}",
                     personaPrompts.size(), interventionPrompts.size());
+        } catch (BusinessException be) {
+            throw be;
         } catch (Exception e) {
             log.error("system_prompts_final.txt 로드 실패: {}", e.getMessage(), e);
-            applyDefaults();
+            throw new BusinessException(ErrorCode.AI_001);
         }
     }
 
@@ -135,20 +138,6 @@ public class SystemPromptLoader {
         int e = src.indexOf(endMarker, s + startMarker.length());
         if (e < 0) e = src.length();
         return src.substring(s, e).trim();
-    }
-
-    private void applyDefaults() {
-        commonRules = "당신은 정서 지원 AI입니다. 진단·처방·병명 단정 금지. 위험 표현 시 안전 응답 우선.";
-        personaPrompts.put(PersonaType.FRIEND, "친구처럼 따뜻한 반말로 짧게 공감하세요.");
-        personaPrompts.put(PersonaType.COUNSELOR, "정중한 존댓말로 비지시적 상담 기법을 사용하세요.");
-        for (InterventionType it : InterventionType.values()) {
-            interventionPrompts.put(it, "");
-        }
-        classifierEmotion = "다음 6종 중 하나만 출력: HAPPY/SAD/ANGRY/ANXIOUS/HURT/EMBARRASSED 또는 한국어 기쁨/슬픔/분노/불안/상처/당황";
-        classifierRisk = "출력 형식: {\"risk\":\"LOW|MEDIUM|HIGH\"}";
-        classifierIntervention = "다음 11종 영문 코드 중 하나만 출력";
-        openingGreeting = "";
-        summarySystem = "당신은 정서 지원 대화 세션을 CBT 관점에서 요약하는 AI입니다. 반드시 JSON 형식으로만 응답하세요.";
     }
 
     public String getCommonRules() {
